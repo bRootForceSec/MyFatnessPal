@@ -5,12 +5,14 @@ import { prettyDate } from '../lib/dates';
 import type { ProgramDay, Workout } from '../lib/db';
 import { deleteRecord, newId, saveRecord } from '../lib/records';
 import { go } from '../lib/router';
+import { useSettings } from '../lib/settings';
 import { blankProgram, pplTemplate } from '../lib/templates';
 import { buildWorkout, elapsed, hms, plannedDay } from '../lib/workout';
 import { inProgress, saveProgram, useActiveProgram, useWorkouts } from '../lib/workoutData';
 
 export function WorkoutHub() {
   const program = useActiveProgram();
+  const { units } = useSettings();
   const workouts = useWorkouts();
   const [, tick] = useState(0);
   const [showAll, setShowAll] = useState(false);
@@ -29,7 +31,7 @@ export function WorkoutHub() {
 
   async function start(day: ProgramDay) {
     if (!program) return;
-    await saveRecord<Workout>('workouts', buildWorkout(program, day, workouts ?? [], newId()));
+    await saveRecord<Workout>('workouts', buildWorkout(program, day, workouts ?? [], newId(), new Date(), units === 'imperial'));
     go('session');
   }
 

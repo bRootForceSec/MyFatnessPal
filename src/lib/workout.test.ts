@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Program, Workout } from './db';
 import { pplTemplate } from './templates';
-import { buildWorkout, hms, lastPerformance, plannedDay, progress, timesDone } from './workout';
+import { buildWorkout, hms, lastPerformance, looksBodyweight, nextWeight, plannedDay, progress, timesDone } from './workout';
 
 const base = { updated_at: '', deleted: 0 as const, dirty: 0 as const };
 const program = (): Program => ({ ...pplTemplate(), ...base });
@@ -80,4 +80,48 @@ describe('progress', () => {
 
 it('formats the stopwatch', () => {
   expect(hms(3725)).toBe('01:02:05');
+});
+
+describe('progression', () => {
+  const LB = 0.45359237;
+  const perf = (reps: number[], weight: number | null, bodyweight?: boolean) => ({
+    date: '2026-10-20',
+    bodyweight,
+    sets: reps.map((r) => ({ kind: 'work' as const, weight_kg: weight, reps: r, rir: 0 })),
+  });
+
+  it('adds weight only when every working set hit the top of the range', () => {
+    expect(nextWeight(perf([10, 9], 60), 10, true)).toBeNull();
+    const n = nextWeight(perf([10, 11], 60), 10, true)!;
+    expect(n.stepKg).toBeCloseTo(5 * LB);
+    expect(n.weightKg).toBeCloseTo(60 + 5 * LB);
+    expect(nextWeight(perf([12, 12], 120), 12, false)!.stepKg).toBe(5);
+    expect(nextWeight(perf([12, 12], 40), 12, false)!.stepKg).toBe(2.5);
+  });
+
+  it('suggests added weight for bodyweight exercises', () => {
+    expect(nextWeight(perf([12, 12], null), 12, true)).toBeNull();
+    expect(nextWeight(perf([12, 12], null, true), 12, true)!.weightKg).toBeCloseTo(5 * LB);
+  });
+
+  it('recognises bodyweight exercises by name', () => {
+    expect(looksBodyweight('Weighted pull-up')).toBe(true);
+    expect(looksBodyweight('Chin ups')).toBe(true);
+    expect(looksBodyweight('Push-up')).toBe(true);
+    expect(looksBodyweight('Weighted dips')).toBe(true);
+    expect(looksBodyweight('Lat pulldown')).toBe(false);
+    expect(looksBodyweight('Incline dumbbell press')).toBe(false);
+  });
+
+  it('prefills the suggested weight when building the next workout', () => {
+    const p = program();
+    const push = p.days[0];
+    const done = finish(buildWorkout(p, push, [], 'w1', new Date('2026-10-26T10:00:00Z')), 10, 30);
+    // The second session uses the alternate, so look at the third.
+    const done2 = finish(buildWorkout(p, push, [done], 'w2', new Date('2026-10-29T10:00:00Z')), 8, 50);
+    const next = buildWorkout(p, push, [done, done2], 'w3', new Date('2026-11-02T10:00:00Z'));
+    const first = next.blocks[0].exercises[0];
+    // Incline dumbbell press range is 6-10, so 10 reps at 30 kg earns +5 lb.
+    expect(first.sets.find((s) => s.kind === 'work')!.weight_kg).toBeCloseTo(30 + 5 * LB, 2);
+  });
 });

@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { BodyIcon, ChartIcon, MealIcon, SettingsIcon, SleepIcon, WorkoutIcon } from '../components/Icons';
 import { useSyncExternalStore } from 'react';
-import { liftHistory, personalRecords } from '../lib/progress';
+import { bodyweightLookup, liftHistory, personalRecords } from '../lib/progress';
 import { ProgressBody } from './Progress';
 import { SyncBadge } from '../components/SyncBadge';
 import { db } from '../lib/db';
@@ -60,7 +60,8 @@ export function Home() {
   }
 
   const wide = useWide();
-  const weekPrs = workouts ? personalRecords(liftHistory(workouts), addDays(today, -6)).length : 0;
+  const bodyLogs = useLiveQuery(() => db.body.filter((b) => !b.deleted).toArray(), []);
+  const weekPrs = workouts && bodyLogs ? personalRecords(liftHistory(workouts, bodyweightLookup(bodyLogs)), addDays(today, -6)).length : 0;
 
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AddFood } from '../components/food/AddFood';
 import { AmountSheet } from '../components/food/AmountSheet';
+import { CopyDay } from '../components/food/CopyDay';
 import { Header } from '../components/Header';
 import { BackIcon } from '../components/Icons';
 import { addDays, localDate, prettyDate } from '../lib/dates';
@@ -14,6 +15,7 @@ export function Meal() {
   const today = localDate();
   const [date, setDate] = useState(today);
   const [adding, setAdding] = useState(false);
+  const [copying, setCopying] = useState(false);
   const [editing, setEditing] = useState<FoodLog | null>(null);
   const logs = useFoodLogs(date);
   const target = useDayTarget(date);
@@ -70,6 +72,9 @@ export function Meal() {
             </span>
           </button>
         ))}
+        <button className="link-btn small copy-btn" onClick={() => setCopying(true)}>
+          Copy from another day
+        </button>
         {logs && logs.length > 0 && (
           <div className="entries-total muted small">
             Total {fmt(eaten.kcal)} kcal · P{Math.round(eaten.protein)} C{Math.round(eaten.carbs)} F{Math.round(eaten.fat)}
@@ -84,6 +89,7 @@ export function Meal() {
       </div>
 
       {adding && <AddFood date={date} onClose={() => setAdding(false)} />}
+      {copying && <CopyDay date={date} onClose={() => setCopying(false)} />}
       {editing && (
         <AmountSheet
           food={editing.food}

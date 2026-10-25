@@ -263,6 +263,8 @@ export interface Bar {
   label: string;
   /** Marks a bar that met its goal; shown as a lighter fill. */
   muted?: boolean;
+  /** This bar's own target, drawn as a short line across it. */
+  target?: number;
 }
 
 export function BarChart({
@@ -276,6 +278,7 @@ export function BarChart({
 }: Common & { bars: Bar[]; color?: string }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const hasTargets = bars.some((b) => b.target != null);
   if (bars.length === 0 || bars.every((b) => b.y === 0))
     return (
       <div className="chart" ref={ref}>
@@ -287,7 +290,7 @@ export function BarChart({
     if (width === 0) return null;
     const xs = bars.map((b) => b.x);
     const [x0, x1] = xDomain ?? [Math.min(...xs), Math.max(...xs)];
-    const ys = [0, ...bars.map((b) => b.y), ...(refLine ? [refLine.y] : [])];
+    const ys = [0, ...bars.map((b) => Math.max(b.y, b.target ?? 0)), ...(refLine ? [refLine.y] : [])];
     const ticks = niceTicks(0, Math.max(...ys) * 1.08, 3);
     const y1 = Math.max(ticks[ticks.length - 1], Math.max(...ys) * 1.08);
     const iw = width - PAD.left - PAD.right;
@@ -334,6 +337,9 @@ export function BarChart({
               <g key={b.x} onPointerEnter={() => setHover(i)} onPointerDown={() => setHover(i)}>
                 <rect x={x - 2} y={PAD.top} width={geo.bw + 4} height={geo.sy(0) - PAD.top} fill="transparent" />
                 {h > 0 && <path d={d} fill={color} opacity={b.muted ? 0.55 : hover === i ? 1 : 0.9} />}
+                {b.target != null && (
+                  <line className="target-tick" x1={x - 2} x2={x + geo.bw + 2} y1={geo.sy(b.target)} y2={geo.sy(b.target)} />
+                )}
               </g>
             );
           })}
@@ -354,6 +360,25 @@ export function BarChart({
             <span className="swatch" style={{ background: color }} />
             <strong>{yFormat(bars[hover].y)}</strong>
           </div>
+          {bars[hover].target != null && (
+            <div className="tt-row">
+              <span className="swatch target-swatch" />
+              <span>target</span>
+              <strong>{yFormat(bars[hover].target!)}</strong>
+            </div>
+          )}
+        </div>
+      )}
+      {hasTargets && (
+        <div className="legend">
+          <span>
+            <span className="swatch" style={{ background: color }} />
+            eaten
+          </span>
+          <span>
+            <span className="swatch target-swatch" />
+            target that day
+          </span>
         </div>
       )}
     </div>

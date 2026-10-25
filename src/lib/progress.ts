@@ -1,6 +1,7 @@
 import { addDays } from './dates';
 import type { BodyLog, FoodLog, Profile, SleepLog, Workout } from './db';
 import { goalRateKg, KCAL_PER_KG } from './nutrition';
+import { looksBodyweight } from './workout';
 
 /* ---------- Time ranges ---------- */
 
@@ -37,8 +38,11 @@ export interface LiftPoint {
   date: string;
   /** Best estimated 1RM that session, kg. */
   e1rm: number;
+  /** Load moved: bar/stack weight, or bodyweight + added weight. */
   weightKg: number;
   reps: number;
+  /** Bodyweight exercises: the added weight (negative = assisted). */
+  addedKg?: number;
 }
 
 export interface Lift {
@@ -49,8 +53,25 @@ export interface Lift {
 
 const norm = (s: string) => s.trim().toLowerCase();
 
-/** Best working set per exercise per session, for every exercise done with weight. */
-export function liftHistory(workouts: Workout[]): Lift[] {
+/** Latest weigh-in on or before a date (else the first one ever), from body logs. */
+export function bodyweightLookup(body: Pick<BodyLog, 'date' | 'weight_kg' | 'deleted'>[]): (date: string) => number | null {
+  const ws = body.filter((b) => !b.deleted && b.weight_kg != null).sort((a, b) => a.date.localeCompare(b.date));
+  return (date) => {
+    if (ws.length === 0) return null;
+    let found = ws[0].weight_kg!;
+    for (const b of ws) {
+      if (b.date > date) break;
+      found = b.weight_kg!;
+    }
+    return found;
+  };
+}
+
+/**
+ * Best working set per exercise per session, for every exercise done with weight.
+ * Bodyweight exercises count that day's bodyweight plus any added weight.
+ */
+export function liftHistory(workouts: Workout[], bodyOn: (date: string) => number | null = () => null): Lift[] {
   const map = new Map<string, Lift>();
   const done = workouts.filter((w) => w.finished_at && !w.deleted).sort((a, b) => a.started_at.localeCompare(b.started_at));
   for (const w of done) {
@@ -58,10 +79,16 @@ export function liftHistory(workouts: Workout[]): Lift[] {
       if (b.skipped) continue;
       for (const e of b.exercises) {
         let best: LiftPoint | null = null;
+        const isBw = e.bodyweight ?? looksBodyweight(e.name);
+        const bw = isBw ? bodyOn(w.date) : null;
+        if (isBw && bw == null) continue; // needs a weigh-in
         for (const s of e.sets) {
-          if (s.kind !== 'work' || !s.reps || !s.weight_kg || s.weight_kg <= 0) continue;
-          const est = e1rm(s.weight_kg, s.reps);
-          if (!best || est > best.e1rm) best = { date: w.date, e1rm: est, weightKg: s.weight_kg, reps: s.reps };
+          if (s.kind !== 'work' || !s.reps) continue;
+          const load = bw != null ? bw + (s.weight_kg ?? 0) : (s.weight_kg ?? 0);
+          if (load <= 0) continue;
+          const est = e1rm(load, s.reps);
+          if (!best || est > best.e1rm)
+            best = { date: w.date, e1rm: est, weightKg: load, reps: s.reps, ...(bw != null ? { addedKg: s.weight_kg ?? 0 } : {}) };
         }
         if (!best) continue;
         const key = norm(e.name);

@@ -30,6 +30,50 @@ export function timesDone(dayId: string, history: Workout[]): number {
 export interface LastPerformance {
   date: string;
   sets: WorkoutSet[];
+  bodyweight?: boolean;
+}
+
+const BODYWEIGHT_RE = /\b(pull[- ]?ups?|chin[- ]?ups?|dips?|push[- ]?ups?|press[- ]?ups?|inverted rows?|muscle[- ]?ups?|pistol squats?|nordic|hanging (leg|knee) raises?|sit[- ]?ups?|bodyweight)\b/i;
+
+/** Exercises that move your own body (added weight is logged on top). */
+export function looksBodyweight(name: string): boolean {
+  return BODYWEIGHT_RE.test(name);
+}
+
+/** Whether an exercise counts bodyweight: what you chose last time, else a guess from its name. */
+export function isBodyweight(name: string, last: LastPerformance | null): boolean {
+  return last?.bodyweight ?? looksBodyweight(name);
+}
+
+/** How much to add once every working set reaches the top of the rep range. */
+export function weightStep(currentKg: number, imperial: boolean): number {
+  const LB = 0.45359237;
+  if (imperial) return (currentKg / LB >= 200 ? 10 : 5) * LB;
+  return currentKg >= 100 ? 5 : 2.5;
+}
+
+export interface Suggestion {
+  /** Weight to use for working sets (added weight for bodyweight exercises). */
+  weightKg: number;
+  stepKg: number;
+}
+
+/**
+ * Double progression: once every working set last time reached the top of the
+ * rep range, add a step of weight; otherwise keep the weight and beat the reps.
+ */
+export function nextWeight(
+  last: LastPerformance | null,
+  repsMax: number,
+  imperial: boolean,
+  bodyweight = last?.bodyweight ?? false,
+): Suggestion | null {
+  const work = last?.sets.filter((s) => s.kind === 'work' && s.reps != null) ?? [];
+  if (work.length === 0 || !work.every((s) => s.reps! >= repsMax)) return null;
+  const top = Math.max(...work.map((s) => s.weight_kg ?? 0));
+  if (top <= 0 && !bodyweight) return null; // no weight logged
+  const stepKg = weightStep(top, imperial);
+  return { weightKg: top + stepKg, stepKg };
 }
 
 /** The most recent finished workout that included this exercise. */
@@ -42,7 +86,7 @@ export function lastPerformance(name: string, history: Workout[], excludeId?: st
       if (b.skipped) continue;
       for (const e of b.exercises) {
         if (norm(e.name) === norm(name) && e.sets.some((s) => s.reps != null)) {
-          return { date: w.date, sets: e.sets.filter((s) => s.reps != null) };
+          return { date: w.date, sets: e.sets.filter((s) => s.reps != null), bodyweight: e.bodyweight };
         }
       }
     }
@@ -56,6 +100,7 @@ export function plannedSets(
   sets: number,
   rir: number | null,
   last: LastPerformance | null,
+  next: Suggestion | null = null,
 ): WorkoutSet[] {
   const lastWarm = last?.sets.filter((s) => s.kind === 'warmup') ?? [];
   const lastWork = last?.sets.filter((s) => s.kind === 'work') ?? [];
@@ -65,10 +110,12 @@ export function plannedSets(
   }
   for (let i = 0; i < sets; i++) {
     const prev = lastWork[i] ?? lastWork[lastWork.length - 1];
-    out.push({ kind: 'work', weight_kg: prev?.weight_kg ?? null, reps: null, rir });
+    out.push({ kind: 'work', weight_kg: next ? round3(next.weightKg) : (prev?.weight_kg ?? null), reps: null, rir });
   }
   return out;
 }
+
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 export function buildWorkout(
   program: Program,
@@ -76,6 +123,7 @@ export function buildWorkout(
   history: Workout[],
   id: string,
   now = new Date(),
+  imperial = true,
 ): Omit<Workout, 'updated_at' | 'deleted' | 'dirty'> {
   const n = timesDone(day.id, history);
   const blocks: WorkoutBlock[] = day.blocks.map((b) => ({
@@ -85,6 +133,8 @@ export function buildWorkout(
     exercises: b.slots.map((s) => {
       const options = s.options.filter((o) => o.trim() !== '');
       const name = options.length ? options[n % options.length] : 'Exercise';
+      const last = lastPerformance(name, history);
+      const bw = isBodyweight(name, last);
       return {
         slotId: s.id,
         name,
@@ -93,7 +143,8 @@ export function buildWorkout(
         repsMax: s.repsMax,
         rir: s.rir,
         notes: s.notes,
-        sets: plannedSets(s.warmupSets, s.sets, s.rir, lastPerformance(name, history)),
+        bodyweight: bw,
+        sets: plannedSets(s.warmupSets, s.sets, s.rir, last, nextWeight(last, s.repsMax, imperial, bw)),
       };
     }),
   }));

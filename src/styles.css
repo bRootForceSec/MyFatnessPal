@@ -543,3 +543,27 @@ p { margin: 0 0 12px; }
   .home-dash .chart-grid { grid-template-columns: 1fr 1fr; }
   .screen:not(.wide):not(.home) { max-width: 720px; }
 }
+
+/* Bodyweight toggle and next-weight hint */
+.ex-head-btns { display: flex; align-items: center; gap: 12px; }
+.bw-toggle {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 3px 7px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.bw-toggle.on { background: var(--body); border-color: var(--body); color: #04202e; }
+.ex-bw { margin-top: 4px; }
+.ex-next { margin-top: 6px; font-size: 0.9rem; color: var(--accent); }
+.ex-next.muted { color: var(--muted); font-size: 0.85rem; }
+.file-btn { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.copy-btn { align-self: flex-start; }
+.copy-list { display: flex; flex-direction: column; max-height: 50vh; overflow-y: auto; margin-bottom: 12px; }
+.copy-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.copy-row input { width: 22px; height: 22px; flex: none; accent-color: var(--accent); }
+.copy-row .food-main { flex: 1; min-width: 0; }
+.chart .target-tick { stroke: var(--text); stroke-width: 2; stroke-linecap: round; }
+.target-swatch { background: var(--text); height: 2px; border-radius: 1px; }

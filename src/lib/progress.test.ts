@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addDays } from './dates';
 import type { Workout } from './db';
-import { calorieCheck, e1rm, liftChange, liftHistory, personalRecords, slopePerWeek, weekStart, weightTrend, workoutsPerWeek } from './progress';
+import { bodyweightLookup, calorieCheck, e1rm, liftChange, liftHistory, personalRecords, slopePerWeek, weekStart, weightTrend, workoutsPerWeek } from './progress';
 
 function workout(date: string, name: string, sets: [number, number][], extra: Partial<Workout> = {}): Workout {
   return {
@@ -120,5 +120,21 @@ describe('weeks', () => {
     expect(weekStart('2026-10-25')).toBe('2026-10-19'); // a Sunday
     const rows = workoutsPerWeek([workout('2026-10-20', 'Squat', [[100, 5]])], '2026-10-06', '2026-10-25');
     expect(rows.map((r) => r.count)).toEqual([0, 0, 1]);
+  });
+});
+
+describe('bodyweight lifts', () => {
+  it("adds that day's bodyweight to the added weight", () => {
+    const w = workout('2026-02-10', 'Pull-up', [[10, 8]]);
+    w.blocks[0].exercises[0].bodyweight = true;
+    const body = [
+      { date: '2026-02-01', weight_kg: 100, deleted: 0 as const },
+      { date: '2026-02-09', weight_kg: 90, deleted: 0 as const },
+      { date: '2026-02-20', weight_kg: 80, deleted: 0 as const },
+    ];
+    const lifts = liftHistory([w], bodyweightLookup(body));
+    expect(lifts[0].points[0].weightKg).toBe(100); // 90 kg that day + 10 added
+    expect(lifts[0].points[0].addedKg).toBe(10);
+    expect(liftHistory([w])).toHaveLength(0); // no weigh-ins yet
   });
 });

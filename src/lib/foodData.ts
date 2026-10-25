@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Food, type FoodData, type FoodLog, type FoodUnit, type Macros, type Program, type Workout } from './db';
 import { computeTargets, entryTotal, isCurrentProfile, targetFor, type Targets, type Training } from './nutrition';
 import { newId, saveRecord } from './records';
-import { useSettings } from './settings';
+import { profileOn, useSettings } from './settings';
 import { useActiveProgram, useWorkouts } from './workoutData';
 
 export function useFoodLogs(date: string): FoodLog[] | undefined {
@@ -133,7 +133,9 @@ export interface DayTarget {
 
 /** Targets for a date, or null if the nutrition setup isn't done yet. undefined while loading. */
 export function useDayTarget(date: string): DayTarget | null | undefined {
-  const { profile, loaded } = useSettings();
+  const prefs = useSettings();
+  const { loaded } = prefs;
+  const profile = profileOn(prefs, date);
   const weight = useWeightOn(date);
   const program = useActiveProgram();
   const workouts = useWorkouts();
