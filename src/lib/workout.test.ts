@@ -55,7 +55,7 @@ describe('buildWorkout', () => {
     const next = buildWorkout(p, push, [done, done2], 'w3', new Date('2026-11-02T10:00:00Z'));
     const sets = next.blocks[0].exercises[0].sets;
     expect(next.blocks[0].exercises[0].name).toBe('Incline dumbbell press');
-    expect(sets.map((s) => s.kind)).toEqual(['warmup', 'warmup', 'work', 'work']);
+    expect(sets.map((s) => s.kind)).toEqual(['warmup', 'work', 'work']);
     expect(sets.every((s) => s.weight_kg === 32.5 && s.reps === null)).toBe(true);
   });
 
