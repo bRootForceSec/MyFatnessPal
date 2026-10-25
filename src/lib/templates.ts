@@ -3,10 +3,12 @@ import type { Block, Program, ProgramDay, Slot } from './db';
 const uid = () => crypto.randomUUID();
 
 function slot(options: string[], sets: number, reps: [number, number], o: Partial<Slot> = {}): Slot {
-  return { id: uid(), options, warmupSets: 0, sets, repsMin: reps[0], repsMax: reps[1], rir: 0, ...o };
+  return { id: uid(), options, warmupSets: 1, sets, repsMin: reps[0], repsMax: reps[1], rir: 0, ...o };
 }
 
 function block(restSec: number, slots: Slot[], optional = false): Block {
+  // Finishers are light enough not to need a warm-up set.
+  if (optional) slots = slots.map((s) => ({ ...s, warmupSets: 0 }));
   return { id: uid(), restSec, slots, optional };
 }
 
@@ -21,9 +23,9 @@ function day(name: string, weekdays: number[], blocks: Block[]): ProgramDay {
  */
 export function pplTemplate(): Omit<Program, 'updated_at' | 'deleted' | 'dirty'> {
   const push = day('Push', [1, 4], [
-    block(180, [slot(['Incline dumbbell press', 'Incline Smith press'], 2, [6, 10], { warmupSets: 2 })]),
-    block(150, [slot(['Machine chest press', 'Weighted dips'], 2, [8, 12], { warmupSets: 1 })]),
-    block(150, [slot(['Seated dumbbell shoulder press', 'Machine shoulder press'], 2, [8, 12], { warmupSets: 1 })]),
+    block(180, [slot(['Incline dumbbell press', 'Incline Smith press'], 2, [6, 10])]),
+    block(150, [slot(['Machine chest press', 'Weighted dips'], 2, [8, 12])]),
+    block(150, [slot(['Seated dumbbell shoulder press', 'Machine shoulder press'], 2, [8, 12])]),
     block(90, [
       slot(['Cable lateral raise', 'Dumbbell lateral raise'], 2, [10, 15]),
       slot(['Overhead cable triceps extension', 'Skull crusher'], 2, [10, 15]),
@@ -39,8 +41,8 @@ export function pplTemplate(): Omit<Program, 'updated_at' | 'deleted' | 'dirty'>
   ]);
 
   const pull = day('Pull', [2, 5], [
-    block(150, [slot(['Lat pulldown', 'Weighted pull-up'], 2, [6, 10], { warmupSets: 2 })]),
-    block(150, [slot(['Chest-supported row', 'Seal row'], 2, [6, 10], { warmupSets: 1 })]),
+    block(150, [slot(['Lat pulldown', 'Weighted pull-up'], 2, [6, 10])]),
+    block(150, [slot(['Chest-supported row', 'Seal row'], 2, [6, 10])]),
     block(90, [slot(['Reverse pec deck', 'Cable rear delt fly'], 2, [10, 15])]),
     block(90, [
       slot(['Incline dumbbell curl', 'Bayesian cable curl'], 2, [8, 12]),
@@ -57,8 +59,8 @@ export function pplTemplate(): Omit<Program, 'updated_at' | 'deleted' | 'dirty'>
   ]);
 
   const legs = day('Legs', [3, 6], [
-    block(180, [slot(['Hack squat', 'Smith machine squat'], 2, [6, 10], { warmupSets: 2 })]),
-    block(180, [slot(['Romanian deadlift', 'Stiff-leg dumbbell deadlift'], 2, [6, 10], { warmupSets: 1 })]),
+    block(180, [slot(['Hack squat', 'Smith machine squat'], 2, [6, 10])]),
+    block(180, [slot(['Romanian deadlift', 'Stiff-leg dumbbell deadlift'], 2, [6, 10])]),
     block(90, [slot(['Leg extension'], 2, [10, 15])]),
     block(90, [
       slot(['Lying leg curl', 'Seated leg curl'], 2, [8, 12]),

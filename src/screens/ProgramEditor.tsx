@@ -84,6 +84,7 @@ export function ProgramEditor() {
             : 'Sessions run in order, A, B, C, then repeat, whatever the day.'}{' '}
           Alternate exercises rotate each time a session comes round.
         </p>
+        <BulkWarmups onApply={(n) => edit((d) => d.days.forEach((day) => day.blocks.forEach((b) => !b.optional && b.slots.forEach((sl) => (sl.warmupSets = n)))))} />
       </section>
 
       {draft.days.map((day, di) => (
@@ -319,6 +320,27 @@ function SlotEditor({
           Remove from superset
         </button>
       )}
+    </div>
+  );
+}
+
+function BulkWarmups({ onApply }: { onApply: (n: number) => void }) {
+  const [n, setN] = useState<number | null>(1);
+  const [done, setDone] = useState(false);
+  return (
+    <div className="bulk-row">
+      <span>Warm-up sets on every exercise (not finishers):</span>
+      <NumberField label="Warm-up sets for all" value={n} onChange={(v) => { setN(v); setDone(false); }} />
+      <button
+        className="secondary"
+        disabled={n == null}
+        onClick={() => {
+          onApply(Math.max(0, Math.round(n ?? 0)));
+          setDone(true);
+        }}
+      >
+        {done ? 'Applied' : 'Apply'}
+      </button>
     </div>
   );
 }

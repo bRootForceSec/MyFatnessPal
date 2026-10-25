@@ -328,12 +328,24 @@ function ExerciseView({
           className="link-btn"
           onClick={() =>
             update((e) => {
+              const at = e.sets.filter((s) => s.kind === 'warmup').length;
+              const prev = e.sets[at - 1];
+              e.sets.splice(at, 0, { kind: 'warmup', weight_kg: prev?.weight_kg ?? null, reps: null, rir: null });
+            })
+          }
+        >
+          + Warm-up set
+        </button>
+        <button
+          className="link-btn"
+          onClick={() =>
+            update((e) => {
               const prev = [...e.sets].reverse().find((s) => s.kind === 'work');
               e.sets.push({ kind: 'work', weight_kg: prev?.weight_kg ?? null, reps: null, rir: e.rir });
             })
           }
         >
-          + Extra set
+          + Working set
         </button>
       </div>
     </section>
