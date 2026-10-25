@@ -2,6 +2,9 @@ import { useRoute } from './lib/router';
 import { Body } from './screens/Body';
 import { ComingSoon } from './screens/ComingSoon';
 import { Home } from './screens/Home';
+import { ProgramEditor } from './screens/ProgramEditor';
+import { Session } from './screens/Session';
+import { WorkoutHub } from './screens/WorkoutHub';
 import { Settings } from './screens/Settings';
 import { Sleep } from './screens/Sleep';
 
@@ -17,7 +20,11 @@ export function App() {
     case 'meal':
       return <ComingSoon title="Meal" step={3} />;
     case 'workout':
-      return <ComingSoon title="Workout" step={2} />;
+      return <WorkoutHub />;
+    case 'session':
+      return <Session />;
+    case 'program':
+      return <ProgramEditor />;
     default:
       return <Home />;
   }

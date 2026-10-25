@@ -5,7 +5,11 @@ installs to your phone's home screen, works offline at the gym, and syncs to you
 
 ## What's in it so far
 
-- Home screen with big **Meal**, **Workout** and **Sleep** buttons (Meal and Workout arrive in steps 3 and 2).
+- Home screen with big **Meal**, **Workout** and **Sleep** buttons (Meal arrives in step 3).
+- **Workout**: programs on fixed weekdays or a rotation, alternate exercises that rotate each session,
+  warm-up sets, RIR, supersets and optional finishers. During a workout, one full-screen card per exercise
+  shows every set and rest time, with a 7-segment stopwatch and a red-to-green progress bar. Weights fill in
+  from last time. Includes a push / pull / legs 6x starter program.
 - **Sleep**: log hours slept and how rested you feel (1 to 5) the morning after.
 - **Body**: weight, body fat and tape measurements, with recent history.
 - **Settings**: kg/cm or lb/in, sync sign-in, and a data export.
