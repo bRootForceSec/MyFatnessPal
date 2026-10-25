@@ -7,6 +7,8 @@ import { go } from '../lib/router';
 import { useSettings } from '../lib/settings';
 import { kgToDisplay, weightUnit } from '../lib/units';
 import { plannedDay } from '../lib/workout';
+import { useDayTarget, useFoodLogs } from '../lib/foodData';
+import { add, fmt, ZERO } from '../lib/nutrition';
 import { inProgress, useActiveProgram, useWorkouts } from '../lib/workoutData';
 
 export function Home() {
@@ -39,6 +41,18 @@ export function Home() {
     workoutSub = 'Set up your program';
   }
 
+  const target = useDayTarget(today);
+  const logs = useFoodLogs(today);
+  const eaten = (logs ?? []).reduce((acc, l) => add(acc, l.total), ZERO);
+  let mealSub = '';
+  if (target) {
+    const kcal = target.today.kcal - eaten.kcal;
+    const protein = Math.round(target.today.protein - eaten.protein);
+    mealSub = `${fmt(Math.abs(kcal))} kcal ${kcal >= 0 ? 'left' : 'over'} · ${protein > 0 ? `${protein}g protein to go` : 'protein hit ✓'}`;
+  } else if (target === null) {
+    mealSub = logs?.length ? `${fmt(eaten.kcal)} kcal today` : 'Set your targets';
+  }
+
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
@@ -58,6 +72,7 @@ export function Home() {
           <MealIcon size={44} />
           <span className="big-text">
             <span className="big-label">Meal</span>
+            {mealSub && <span className="big-sub">{mealSub}</span>}
           </span>
         </button>
         <button className="big-btn workout" onClick={() => go('workout')}>

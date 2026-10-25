@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
-export type Route = 'home' | 'meal' | 'workout' | 'session' | 'program' | 'sleep' | 'body' | 'settings';
-const ROUTES: Route[] = ['home', 'meal', 'workout', 'session', 'program', 'sleep', 'body', 'settings'];
+export type Route = 'home' | 'meal' | 'workout' | 'session' | 'program' | 'targets' | 'sleep' | 'body' | 'settings';
+const ROUTES: Route[] = ['home', 'meal', 'workout', 'session', 'program', 'targets', 'sleep', 'body', 'settings'];
 
 function current(): Route {
   const h = location.hash.replace(/^#\/?/, '').split('?')[0];

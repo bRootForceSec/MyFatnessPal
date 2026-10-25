@@ -32,6 +32,8 @@ jobs:
           # Optional: set these as repository variables so every device is connected automatically.
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          # Optional: free key from https://api.data.gov/signup for food search.
+          VITE_USDA_API_KEY: ${{ vars.USDA_API_KEY }}
       - if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:

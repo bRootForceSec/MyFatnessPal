@@ -40,8 +40,92 @@ export interface BodyLog extends BaseRecord {
   measurements_cm?: Partial<Record<MeasurementKey, number>>;
 }
 
+export type Sex = 'male' | 'female';
+export type Activity = 'sedentary' | 'light' | 'moderate' | 'very' | 'extra';
+export type Goal = 'lose' | 'recomp' | 'maintain' | 'gain';
+
+/** Answers from the nutrition setup. Everything is stored in metric. */
+export interface Profile {
+  sex: Sex;
+  birth_year: number;
+  height_cm: number;
+  activity: Activity;
+  goal: Goal;
+  /** Target change in bodyweight per week, as % of bodyweight (negative = lose). */
+  rate_pct: number;
+  protein_mode: 'per_weight' | 'fixed';
+  /** Grams of protein per kg of bodyweight (shown as g/lb in imperial). */
+  protein_g_per_kg: number;
+  protein_fixed_g: number;
+  /** Share of calories from fat, e.g. 0.25. Carbs fill the rest. */
+  fat_pct: number;
+  calorie_mode: 'calculated' | 'manual';
+  manual_kcal: number;
+  /** Shift calories from rest days to training days (same weekly total). */
+  cycle: boolean;
+  /** e.g. 0.1 = a training day gets 10% of the daily average more than a rest day. */
+  cycle_pct: number;
+  training_days: number;
+}
+
 export interface Settings extends BaseRecord {
   units: UnitSystem;
+  profile?: Profile;
+}
+
+/* ---------- Food ---------- */
+
+export interface Macros {
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+/** A way to measure a food, e.g. "1 cup" = 240 g, or "serving" = 1 serving. */
+export interface FoodUnit {
+  label: string;
+  /** Grams for gram-based foods, servings for serving-based foods. */
+  amount: number;
+}
+
+/** What you need to log a food, saved with every entry so entries never change. */
+export interface FoodData {
+  name: string;
+  brand?: string;
+  /** 'g' = macros are per 100 g; 'serving' = macros are per 1 serving. */
+  basis: 'g' | 'serving';
+  macros: Macros;
+  units: FoodUnit[];
+  barcode?: string;
+  source: 'usda' | 'off' | 'custom' | 'recipe' | 'quick';
+  source_id?: string;
+}
+
+export interface RecipeIngredient {
+  food: FoodData;
+  qty: number;
+  unit: FoodUnit;
+}
+
+/** Saved foods: your own foods, recipes and meals, and anything you've logged before. */
+export interface Food extends BaseRecord, FoodData {
+  ingredients?: RecipeIngredient[];
+  /** Recipes: how many servings the whole recipe makes. */
+  yield_servings?: number;
+  /** true = shown under "My foods" (created or saved by you). */
+  saved: 0 | 1;
+}
+
+export interface FoodLog extends BaseRecord {
+  date: string;
+  logged_at: string;
+  food_id?: string;
+  food: FoodData;
+  qty: number;
+  unit: FoodUnit;
+  /** Totals for this entry. */
+  total: Macros;
 }
 
 export const SETTINGS_ID = 'settings';
@@ -134,7 +218,7 @@ export interface Meta {
 }
 
 /** Collections that sync to the server. Add new ones here as features land. */
-export const COLLECTIONS = ['settings', 'sleep', 'body', 'programs', 'workouts'] as const;
+export const COLLECTIONS = ['settings', 'sleep', 'body', 'programs', 'workouts', 'foods', 'food_logs'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 class AppDB extends Dexie {
@@ -143,6 +227,8 @@ class AppDB extends Dexie {
   body!: Table<BodyLog, string>;
   programs!: Table<Program, string>;
   workouts!: Table<Workout, string>;
+  foods!: Table<Food, string>;
+  food_logs!: Table<FoodLog, string>;
   meta!: Table<Meta, string>;
 
   constructor() {
@@ -156,6 +242,10 @@ class AppDB extends Dexie {
     this.version(2).stores({
       programs: 'id, dirty',
       workouts: 'id, date, started_at, dirty',
+    });
+    this.version(3).stores({
+      foods: 'id, barcode, source_id, dirty',
+      food_logs: 'id, date, logged_at, dirty',
     });
   }
 }

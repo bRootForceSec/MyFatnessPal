@@ -1,7 +1,8 @@
 import { useRoute } from './lib/router';
 import { Body } from './screens/Body';
-import { ComingSoon } from './screens/ComingSoon';
 import { Home } from './screens/Home';
+import { Meal } from './screens/Meal';
+import { Targets } from './screens/Targets';
 import { ProgramEditor } from './screens/ProgramEditor';
 import { Session } from './screens/Session';
 import { WorkoutHub } from './screens/WorkoutHub';
@@ -18,7 +19,9 @@ export function App() {
     case 'settings':
       return <Settings />;
     case 'meal':
-      return <ComingSoon title="Meal" step={3} />;
+      return <Meal />;
+    case 'targets':
+      return <Targets />;
     case 'workout':
       return <WorkoutHub />;
     case 'session':

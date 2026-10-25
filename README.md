@@ -5,7 +5,11 @@ installs to your phone's home screen, works offline at the gym, and syncs to you
 
 ## What's in it so far
 
-- Home screen with big **Meal**, **Workout** and **Sleep** buttons (Meal arrives in step 3).
+- Home screen with big **Meal**, **Workout** and **Sleep** buttons.
+- **Food**: one running list per day with calories and protein / carbs / fat left at the top. Add food from
+  recent foods, your own foods, recipes and saved meals, a search of the USDA and Open Food Facts databases,
+  a barcode scan, or quick add. Targets come from your stats and goal (Mifflin-St Jeor), with the working shown,
+  and can shift calories to training days.
 - **Workout**: programs on fixed weekdays or a rotation, alternate exercises that rotate each session,
   warm-up sets, RIR, supersets and optional finishers. During a workout, one full-screen card per exercise
   shows every set and rest time, with a 7-segment stopwatch and a red-to-green progress bar. Weights fill in
@@ -44,7 +48,12 @@ Either:
 
 Then create your account in the app's Settings and sign in on your phone and computer.
 
-### 5. Install on your phone
+### 5. Food search key (recommended)
+Food search uses USDA FoodData Central. Without a key it uses a shared demo key limited to about 30 searches
+an hour. Get a free key at https://api.data.gov/signup and add it as the repository variable `USDA_API_KEY`
+(or paste it in the app under Settings).
+
+### 6. Install on your phone
 Open the site on your phone, then **Share → Add to Home Screen** (iPhone, Safari) or **⋮ → Install app** (Android, Chrome).
 
 Note: Supabase pauses free projects after 7 days without use. If that happens, open the Supabase dashboard
