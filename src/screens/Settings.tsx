@@ -6,6 +6,8 @@ import { exportAll } from '../lib/records';
 import { updateSettings, useSettings } from '../lib/settings';
 import { configFromBuild, getConfig, getSupabase, saveConfig } from '../lib/supabase';
 import { syncNow, useSyncState } from '../lib/sync';
+import { setUsdaKey, usdaKey, usdaKeyFromBuild } from '../lib/foodApi';
+import { go } from '../lib/router';
 
 export function Settings() {
   const { units } = useSettings();
@@ -38,7 +40,17 @@ export function Settings() {
         </div>
       </section>
 
+      <section className="card">
+        <h2>Nutrition targets</h2>
+        <p className="muted">Your stats, goal, protein and training-day calories.</p>
+        <button className="secondary" onClick={() => go('targets')}>
+          Open targets
+        </button>
+      </section>
+
       <SyncSection />
+
+      {!usdaKeyFromBuild() && <UsdaKey />}
 
       <section className="card">
         <h2>Your data</h2>
@@ -186,6 +198,28 @@ function SignIn() {
           Create account
         </button>
       </div>
+    </section>
+  );
+}
+
+function UsdaKey() {
+  const cur = usdaKey();
+  const [key, setKey] = useState(cur === 'DEMO_KEY' ? '' : cur);
+  const [saved, setSaved] = useState(false);
+  return (
+    <section className="card">
+      <h2>Food search key</h2>
+      <p className="muted">
+        Food search uses the free USDA database. Without your own key it's limited to about 30 searches an hour. Get a free key
+        at api.data.gov/signup and paste it here.
+      </p>
+      <label className="field">
+        <span>USDA API key</span>
+        <input value={key} onChange={(e) => { setKey(e.target.value); setSaved(false); }} placeholder="DEMO_KEY" />
+      </label>
+      <button className="secondary" onClick={() => { setUsdaKey(key); setSaved(true); }}>
+        {saved ? 'Saved' : 'Save key'}
+      </button>
     </section>
   );
 }
