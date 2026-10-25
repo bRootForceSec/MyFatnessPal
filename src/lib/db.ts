@@ -87,6 +87,8 @@ export interface Settings extends BaseRecord {
   profile?: Profile;
   /** Earlier versions of `profile`, so past days keep the targets they had. Oldest first. */
   profile_history?: ProfileVersion[];
+  /** Your own USDA FoodData Central key ('' = none), shared across your devices. */
+  usda_key?: string;
 }
 
 /* ---------- Food ---------- */

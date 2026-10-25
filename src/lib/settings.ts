@@ -3,10 +3,10 @@ import { localDate } from './dates';
 import { db, SETTINGS_ID, type Profile, type ProfileVersion, type Settings } from './db';
 import { saveRecord } from './records';
 
-type Prefs = Pick<Settings, 'units' | 'profile' | 'profile_history'>;
+type Prefs = Pick<Settings, 'units' | 'profile' | 'profile_history' | 'usda_key'>;
 export const DEFAULT_SETTINGS: Prefs = { units: 'imperial' };
 
-const pick = (rec: Settings): Prefs => ({ units: rec.units, profile: rec.profile, profile_history: rec.profile_history });
+const pick = (rec: Settings): Prefs => ({ units: rec.units, profile: rec.profile, profile_history: rec.profile_history, usda_key: rec.usda_key });
 
 export function useSettings(): Prefs & { loaded: boolean } {
   const s = useLiveQuery(async () => ({ rec: await db.settings.get(SETTINGS_ID) }), []);
@@ -37,7 +37,7 @@ export function profileOn(prefs: Pick<Prefs, 'profile' | 'profile_history'>, dat
   return found?.profile.v === 2 ? found.profile : prefs.profile;
 }
 
-export async function updateSettings(patch: Partial<Pick<Prefs, 'units' | 'profile'>>): Promise<void> {
+export async function updateSettings(patch: Partial<Pick<Prefs, 'units' | 'profile' | 'usda_key'>>): Promise<void> {
   const cur = await db.settings.get(SETTINGS_ID);
   const base: Prefs = { ...DEFAULT_SETTINGS, ...(cur && !cur.deleted ? pick(cur) : {}) };
   const next: Prefs = { ...base, ...patch };

@@ -15,9 +15,23 @@ export function usdaKey(): string {
   }
 }
 
-export function setUsdaKey(k: string): void {
-  if (k.trim()) localStorage.setItem(USDA_KEY_STORAGE, k.trim());
-  else localStorage.removeItem(USDA_KEY_STORAGE);
+/** Cache the key on this device (the synced copy lives in settings). */
+export function cacheUsdaKey(k: string): void {
+  try {
+    if (k.trim()) localStorage.setItem(USDA_KEY_STORAGE, k.trim());
+    else localStorage.removeItem(USDA_KEY_STORAGE);
+  } catch {
+    /* storage blocked */
+  }
+}
+
+/** The key saved on this device only (from before keys synced). */
+export function localUsdaKey(): string {
+  try {
+    return localStorage.getItem(USDA_KEY_STORAGE) ?? '';
+  } catch {
+    return '';
+  }
 }
 
 export function usdaKeyFromBuild(): boolean {
