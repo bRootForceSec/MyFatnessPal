@@ -40,7 +40,8 @@ export function Targets() {
     if (!loaded || weightKg === undefined || p) return;
     setP(upgradeProfile(profile));
     setWeight(weightKg == null ? null : kgToDisplay(weightKg, units));
-    if (!isCurrentProfile(profile)) setEditing(true);
+    // Ask again if the questions changed, or if there's no weigh-in to calculate from.
+    if (!isCurrentProfile(profile) || weightKg == null) setEditing(true);
   }, [loaded, weightKg, profile, units, p]);
 
   if (!p || !training) return <main className="screen" />;

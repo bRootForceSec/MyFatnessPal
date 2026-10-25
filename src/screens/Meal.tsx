@@ -7,12 +7,14 @@ import { BackIcon } from '../components/Icons';
 import { addDays, localDate, prettyDate } from '../lib/dates';
 import type { FoodLog, Macros } from '../lib/db';
 import { logFood, useDayTarget, useFoodLogs } from '../lib/foodData';
-import { add, amountText, fmt, ZERO } from '../lib/nutrition';
+import { add, amountText, fmt, isCurrentProfile, ZERO } from '../lib/nutrition';
 import { deleteRecord } from '../lib/records';
 import { go } from '../lib/router';
+import { useSettings } from '../lib/settings';
 
 export function Meal() {
   const today = localDate();
+  const { profile } = useSettings();
   const [date, setDate] = useState(today);
   const [adding, setAdding] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -47,8 +49,17 @@ export function Meal() {
 
       {target === null ? (
         <button className="card setup-card" onClick={() => go('targets')}>
-          <strong>Set your calorie and macro targets</strong>
-          <span className="muted">A few quick questions, then you'll see what's left each day.</span>
+          {isCurrentProfile(profile) ? (
+            <>
+              <strong>Add your weight to see your targets</strong>
+              <span className="muted">Targets are worked out from your weight. Tap to enter it.</span>
+            </>
+          ) : (
+            <>
+              <strong>Set your calorie and macro targets</strong>
+              <span className="muted">A few quick questions, then you'll see what's left each day.</span>
+            </>
+          )}
         </button>
       ) : target ? (
         <Remaining eaten={eaten} goal={target.today} />
