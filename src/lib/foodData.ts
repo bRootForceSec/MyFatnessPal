@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Food, type FoodData, type FoodLog, type FoodUnit, type Macros, type Program, type Workout } from './db';
-import { computeTargets, entryTotal, targetFor, type Targets } from './nutrition';
+import { computeTargets, entryTotal, isCurrentProfile, targetFor, type Targets, type Training } from './nutrition';
 import { newId, saveRecord } from './records';
 import { useSettings } from './settings';
 import { useActiveProgram, useWorkouts } from './workoutData';
@@ -103,6 +103,28 @@ export function useWeightOn(date: string): number | null | undefined {
   }, [date]);
 }
 
+/** Workouts per week and typical length, from the program and the last 4 weeks of logs. */
+export function trainingStats(program: Program | null | undefined, workouts: Workout[], now = Date.now()): Training {
+  const since = now - 28 * 86400_000;
+  const recent = workouts.filter((w) => w.finished_at && !w.deleted && new Date(w.started_at).getTime() >= since);
+  const lengths = recent
+    .map((w) => (new Date(w.finished_at!).getTime() - new Date(w.started_at).getTime()) / 3600_000)
+    .filter((h) => h > 0.15 && h < 4);
+  const hours = lengths.length >= 3 ? lengths.reduce((a, b) => a + b, 0) / lengths.length : 0.75;
+  let sessionsPerWeek: number;
+  if (program?.schedule === 'weekly') sessionsPerWeek = new Set(program.days.flatMap((d) => d.weekdays)).size;
+  else if (recent.length >= 4) sessionsPerWeek = Math.min(7, recent.length / 4);
+  else sessionsPerWeek = program ? 3 : 0;
+  return { sessionsPerWeek: Math.round(sessionsPerWeek * 10) / 10, hours: Math.round(hours * 100) / 100 };
+}
+
+export function useTraining(): Training | undefined {
+  const program = useActiveProgram();
+  const workouts = useWorkouts();
+  if (program === undefined || workouts === undefined) return undefined;
+  return trainingStats(program, workouts);
+}
+
 export interface DayTarget {
   targets: Targets;
   today: Macros;
@@ -116,8 +138,8 @@ export function useDayTarget(date: string): DayTarget | null | undefined {
   const program = useActiveProgram();
   const workouts = useWorkouts();
   if (!loaded || weight === undefined || program === undefined || workouts === undefined) return undefined;
-  if (!profile || weight == null) return null;
-  const targets = computeTargets(profile, weight, Number(date.slice(0, 4)));
+  if (!isCurrentProfile(profile) || weight == null) return null;
+  const targets = computeTargets(profile, weight, trainingStats(program, workouts), Number(date.slice(0, 4)));
   const training = isTrainingDay(date, program, workouts);
   return { targets, today: targetFor(targets, training), training };
 }
