@@ -190,7 +190,7 @@ function Card({ w, history, onFinish }: { w: Workout; history: Workout[]; onFini
 
 const blockDone = (b: WorkoutBlock) => b.exercises.every((e) => e.sets.every((s) => s.reps != null));
 
-function BlockView({
+export function BlockView({
   block,
   units,
   history,

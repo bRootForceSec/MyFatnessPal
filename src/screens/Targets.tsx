@@ -8,11 +8,11 @@ import {
   computeTargets,
   fmt,
   GOALS,
+  goalRateKg,
   isCurrentProfile,
   KCAL_PER_KG,
   LIFESTYLE,
   LIFT_KCAL_PER_KG_HOUR,
-  RECOMP_RATE_KG,
   rateChoices,
   upgradeProfile,
   type Targets as TargetsT,
@@ -139,7 +139,7 @@ export function Targets() {
                   className={`choice ${p.goal === g ? 'on' : ''}`}
                   onClick={() => {
                     const rates = rateChoices(g, imperial);
-                    setP({ ...p, goal: g, rate_kg: rates.length ? rates[Math.min(1, rates.length - 1)] : p.rate_kg });
+                    setP({ ...p, goal: g, kcal_adjust: g === p.goal ? p.kcal_adjust : 0, rate_kg: rates.length ? rates[Math.min(1, rates.length - 1)] : p.rate_kg });
                   }}
                 >
                   <strong>{GOALS[g].label}</strong>
@@ -264,7 +264,7 @@ function Working({ t, p, units }: { t: TargetsT; p: Profile; units: UnitSystem }
   const imperial = units === 'imperial';
   const wu = weightUnit(units);
   const wDisp = kgToDisplay(w.weightKg, units);
-  const kgWeek = p.goal === 'lose' ? -p.rate_kg : p.goal === 'gain' ? p.rate_kg : p.goal === 'recomp' ? -RECOMP_RATE_KG : 0;
+  const kgWeek = goalRateKg(p);
   const box = (m: TargetsT['day']) => (
     <div className="target-grid">
       <div>
@@ -324,6 +324,12 @@ function Working({ t, p, units }: { t: TargetsT; p: Profile; units: UnitSystem }
                   : {imperial ? `${round(kgWeek / KG_PER_LB, 2)} lb` : `${round(kgWeek, 2)} kg`} a week × {imperial ? '3,500 kcal/lb' : `${KCAL_PER_KG} kcal/kg`} ÷ 7 ={' '}
                   {w.adjust > 0 ? '+' : ''}
                   {fmt(w.adjust)} kcal/day
+                </>
+              )}
+              {w.progressAdjust !== 0 && (
+                <>
+                  , {w.progressAdjust > 0 ? '+' : ''}
+                  {fmt(w.progressAdjust)} kcal/day from your progress check
                 </>
               )}{' '}
               → <strong>{fmt(t.day.kcal)} kcal</strong>

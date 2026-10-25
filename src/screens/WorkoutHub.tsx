@@ -13,6 +13,7 @@ export function WorkoutHub() {
   const program = useActiveProgram();
   const workouts = useWorkouts();
   const [, tick] = useState(0);
+  const [showAll, setShowAll] = useState(false);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(t);
@@ -24,7 +25,7 @@ export function WorkoutHub() {
   const history = workouts
     .filter((w) => w.finished_at)
     .sort((a, b) => b.started_at.localeCompare(a.started_at))
-    .slice(0, 20);
+    .slice(0, showAll ? undefined : 20);
 
   async function start(day: ProgramDay) {
     if (!program) return;
@@ -115,6 +116,7 @@ export function WorkoutHub() {
       {history.length > 0 && (
         <section className="history">
           <h2>History</h2>
+          <p className="muted small">Tap a workout to view or edit it.</p>
           <ul>
             {history.map((w) => {
               const sets = w.blocks.reduce(
@@ -123,14 +125,14 @@ export function WorkoutHub() {
               );
               return (
                 <li key={w.id}>
-                  <div className="row-main">
+                  <button className="row-main" onClick={() => go('past', { id: w.id })}>
                     <span>
                       {prettyDate(w.date)} · {w.day_name}
                     </span>
                     <span className="muted">
                       {hms(elapsed(w.started_at, w.finished_at))} · {sets} sets
                     </span>
-                  </div>
+                  </button>
                   <button
                     className="icon-btn small"
                     onClick={() => confirm('Delete this workout?') && deleteRecord('workouts', w.id)}
@@ -142,6 +144,11 @@ export function WorkoutHub() {
               );
             })}
           </ul>
+          {!showAll && workouts.filter((w) => w.finished_at).length > 20 && (
+            <button className="link-btn" onClick={() => setShowAll(true)}>
+              Show all
+            </button>
+          )}
         </section>
       )}
     </main>
