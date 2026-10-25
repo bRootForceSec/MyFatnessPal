@@ -78,3 +78,10 @@ export const TrashIcon = ({ size }: P) => (
     <path d="M19 6l-1 14H6L5 6" />
   </Svg>
 );
+
+export const ChartIcon = ({ size }: P) => (
+  <Svg size={size}>
+    <path d="M3 3v18h18" />
+    <path d="M7 15l4-4 3 3 6-7" />
+  </Svg>
+);

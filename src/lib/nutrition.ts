@@ -13,6 +13,7 @@ export const GOALS: Record<Goal, { label: string; desc: string }> = {
   recomp: { label: 'Lose fat and build muscle', desc: 'A small deficit, about ½ lb (0.25 kg) a week, with hard training and high protein' },
   maintain: { label: 'Maintain weight', desc: 'Eat at maintenance' },
   gain: { label: 'Gain weight', desc: 'Pick how fast' },
+  strength: { label: 'Get stronger', desc: 'Eat at maintenance with high protein. Progress is tracked by your lifts.' },
 };
 
 /** Weekly rate choices in kg/week, matching MyFitnessPal (lb options for imperial). */
@@ -103,6 +104,8 @@ export interface Targets {
     factor: number;
     lifestyleKcal: number;
     adjust: number;
+    /** Change applied from the progress check, kcal/day. */
+    progressAdjust: number;
     perWorkout: number;
     workoutEstimated: boolean;
     sessions: number;
@@ -120,10 +123,13 @@ function macrosFor(kcal: number, protein: number, p: Profile, min: { fat: number
   return { kcal: Math.round(kcal), protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat) };
 }
 
+/** Planned bodyweight change in kg per week (negative = losing). */
+export function goalRateKg(p: Pick<Profile, 'goal' | 'rate_kg'>): number {
+  return p.goal === 'lose' ? -p.rate_kg : p.goal === 'gain' ? p.rate_kg : p.goal === 'recomp' ? -RECOMP_RATE_KG : 0;
+}
+
 export function goalAdjust(p: Profile): number {
-  const kgPerWeek =
-    p.goal === 'lose' ? -p.rate_kg : p.goal === 'gain' ? p.rate_kg : p.goal === 'recomp' ? -RECOMP_RATE_KG : 0;
-  return (kgPerWeek * KCAL_PER_KG) / 7;
+  return (goalRateKg(p) * KCAL_PER_KG) / 7;
 }
 
 export function computeTargets(p: Profile, weightKg: number, training: Training, year = new Date().getFullYear()): Targets {
@@ -132,6 +138,7 @@ export function computeTargets(p: Profile, weightKg: number, training: Training,
   const factor = LIFESTYLE[p.lifestyle].factor;
   const lifestyleKcal = rest * factor;
   const adjust = goalAdjust(p);
+  const progressAdjust = p.kcal_adjust ?? 0;
   const perWorkout = p.workout_kcal ?? LIFT_KCAL_PER_KG_HOUR * weightKg * training.hours;
   const workoutDaily = (perWorkout * training.sessionsPerWeek) / 7;
   const floor = KCAL_FLOOR[p.sex];
@@ -139,7 +146,7 @@ export function computeTargets(p: Profile, weightKg: number, training: Training,
   const protein = p.protein_mode === 'fixed' ? p.protein_fixed_g : p.protein_g_per_kg * weightKg;
   const min = { fat: Math.round(p.fat_min_g_per_kg * weightKg), carbs: Math.round(p.carb_min_g_per_kg * weightKg) };
 
-  let base = lifestyleKcal + adjust; // a rest day
+  let base = lifestyleKcal + adjust + progressAdjust; // a rest day
   let floored = false;
   if (p.calorie_mode === 'calculated' && base + workoutDaily < floor) {
     floored = true;
@@ -158,6 +165,7 @@ export function computeTargets(p: Profile, weightKg: number, training: Training,
       factor,
       lifestyleKcal: Math.round(lifestyleKcal),
       adjust: Math.round(adjust),
+      progressAdjust: Math.round(progressAdjust),
       perWorkout: Math.round(perWorkout),
       workoutEstimated: p.workout_kcal == null,
       sessions: training.sessionsPerWeek,

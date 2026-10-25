@@ -43,7 +43,7 @@ export interface BodyLog extends BaseRecord {
 export type Sex = 'male' | 'female';
 /** How active your day is outside of workouts. */
 export type Lifestyle = 'not_very' | 'light' | 'active' | 'very';
-export type Goal = 'lose' | 'recomp' | 'maintain' | 'gain';
+export type Goal = 'lose' | 'recomp' | 'maintain' | 'gain' | 'strength';
 
 /** Answers from the nutrition setup. Everything is stored in metric. */
 export interface Profile {
@@ -71,6 +71,8 @@ export interface Profile {
   carb_min_g_per_kg: number;
   calorie_mode: 'calculated' | 'manual';
   manual_kcal: number;
+  /** Calories added or removed after comparing the weight trend with the goal (calculated mode). */
+  kcal_adjust?: number;
 }
 
 export interface Settings extends BaseRecord {

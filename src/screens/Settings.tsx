@@ -3,25 +3,33 @@ import { useEffect, useState } from 'react';
 import { Header } from '../components/Header';
 import { SyncBadge } from '../components/SyncBadge';
 import { exportAll } from '../lib/records';
+import { buildCsv, type CsvKind } from '../lib/csv';
 import { updateSettings, useSettings } from '../lib/settings';
 import { configFromBuild, getConfig, getSupabase, saveConfig } from '../lib/supabase';
 import { syncNow, useSyncState } from '../lib/sync';
 import { setUsdaKey, usdaKey, usdaKeyFromBuild } from '../lib/foodApi';
 import { go } from '../lib/router';
+import { localDate } from '../lib/dates';
 
 export function Settings() {
   const { units } = useSettings();
 
+  const stamp = () => localDate();
+  function save(text: string, type: string, name: string) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   async function download() {
     const data = await exportAll();
-    const blob = new Blob([JSON.stringify({ exported_at: new Date().toISOString(), ...data }, null, 2)], {
-      type: 'application/json',
-    });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `myfatnesspal-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    save(JSON.stringify({ exported_at: new Date().toISOString(), ...data }, null, 2), 'application/json', `myfatnesspal-${stamp()}.json`);
+  }
+
+  async function csv(kind: CsvKind) {
+    save(await buildCsv(kind, units), 'text/csv', `myfatnesspal-${kind}-${stamp()}.csv`);
   }
 
   return (
@@ -54,9 +62,27 @@ export function Settings() {
 
       <section className="card">
         <h2>Your data</h2>
-        <p className="muted">Download everything you've logged as a JSON file, as a backup.</p>
+        <p className="muted">Spreadsheets (CSV) open in Excel, Google Sheets or Numbers.</p>
+        <div className="export-grid">
+          <button className="secondary" onClick={() => csv('daily')}>
+            Daily summary
+          </button>
+          <button className="secondary" onClick={() => csv('food')}>
+            Food log
+          </button>
+          <button className="secondary" onClick={() => csv('workouts')}>
+            Workouts (every set)
+          </button>
+          <button className="secondary" onClick={() => csv('body')}>
+            Weight and measurements
+          </button>
+          <button className="secondary" onClick={() => csv('sleep')}>
+            Sleep
+          </button>
+        </div>
+        <p className="muted small">A full backup of everything, as one JSON file:</p>
         <button className="secondary" onClick={download}>
-          Export my data
+          Download backup
         </button>
       </section>
     </main>

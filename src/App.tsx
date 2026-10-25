@@ -8,6 +8,8 @@ import { Session } from './screens/Session';
 import { WorkoutHub } from './screens/WorkoutHub';
 import { Settings } from './screens/Settings';
 import { Sleep } from './screens/Sleep';
+import { Progress } from './screens/Progress';
+import { PastWorkout } from './screens/PastWorkout';
 
 export function App() {
   const route = useRoute();
@@ -28,6 +30,10 @@ export function App() {
       return <Session />;
     case 'program':
       return <ProgramEditor />;
+    case 'progress':
+      return <Progress />;
+    case 'past':
+      return <PastWorkout />;
     default:
       return <Home />;
   }
