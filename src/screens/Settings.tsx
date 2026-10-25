@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
 import { Header } from '../components/Header';
 import { SyncBadge } from '../components/SyncBadge';
-import { exportAll } from '../lib/records';
+import { exportAll, importBackup } from '../lib/records';
 import { buildCsv, type CsvKind } from '../lib/csv';
 import { updateSettings, useSettings } from '../lib/settings';
 import { configFromBuild, getConfig, getSupabase, saveConfig } from '../lib/supabase';
@@ -26,6 +26,19 @@ export function Settings() {
   async function download() {
     const data = await exportAll();
     save(JSON.stringify({ exported_at: new Date().toISOString(), ...data }, null, 2), 'application/json', `myfatnesspal-${stamp()}.json`);
+  }
+
+  const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
+  async function restore(file: File | undefined) {
+    if (!file) return;
+    try {
+      const r = await importBackup(JSON.parse(await file.text()));
+      setRestoreMsg(
+        `Restored: ${r.added} added, ${r.updated} updated` + (r.skipped ? `, ${r.skipped} skipped (newer here already)` : '') + '.',
+      );
+    } catch (e) {
+      setRestoreMsg(e instanceof SyntaxError ? "That file isn't a MyFatnessPal backup." : (e as Error).message);
+    }
   }
 
   async function csv(kind: CsvKind) {
@@ -81,9 +94,19 @@ export function Settings() {
           </button>
         </div>
         <p className="muted small">A full backup of everything, as one JSON file:</p>
-        <button className="secondary" onClick={download}>
-          Download backup
-        </button>
+        <div className="export-grid">
+          <button className="secondary" onClick={download}>
+            Download backup
+          </button>
+          <label className="secondary file-btn">
+            Restore backup
+            <input type="file" accept=".json,application/json" onChange={(e) => restore(e.target.files?.[0])} hidden />
+          </label>
+        </div>
+        <p className="muted small">
+          Restoring adds back anything missing from this device. Where something exists in both, the newer edit is kept.
+        </p>
+        {restoreMsg && <p className="small">{restoreMsg}</p>}
       </section>
     </main>
   );

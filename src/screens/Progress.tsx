@@ -3,9 +3,10 @@ import { useMemo, useState } from 'react';
 import { BarChart, LineChart, SERIES_COLORS, type Series } from '../components/Chart';
 import { Header } from '../components/Header';
 import { addDays, formatHours, localDate, prettyDate } from '../lib/dates';
-import { db, type Goal, type Profile } from '../lib/db';
-import { useDayTarget, useTraining } from '../lib/foodData';
-import { fmt, goalRateKg } from '../lib/nutrition';
+import { db, type Goal, type Macros, type Profile } from '../lib/db';
+import { isTrainingDay, useTraining } from '../lib/foodData';
+import { useActiveProgram } from '../lib/workoutData';
+import { computeTargets, fmt, goalRateKg, isCurrentProfile, targetFor } from '../lib/nutrition';
 import {
   caloriesByDay,
   calorieCheck,
@@ -13,6 +14,7 @@ import {
   dayMs,
   liftChange,
   liftHistory,
+  bodyweightLookup,
   personalRecords,
   rangeStart,
   RANGES,
@@ -24,7 +26,7 @@ import {
   type RangeKey,
 } from '../lib/progress';
 import { go } from '../lib/router';
-import { updateSettings, useSettings } from '../lib/settings';
+import { profileOn, updateSettings, useSettings } from '../lib/settings';
 import { cmToDisplay, kgToDisplay, lengthUnit, round, weightUnit, type UnitSystem } from '../lib/units';
 import { useWorkouts } from '../lib/workoutData';
 
@@ -75,10 +77,20 @@ export function ProgressBody() {
   const body = useLiveQuery(() => db.body.filter((b) => !b.deleted).toArray(), []);
   const food = useLiveQuery(() => db.food_logs.filter((f) => !f.deleted).toArray(), []);
   const sleep = useLiveQuery(() => db.sleep.filter((s) => !s.deleted).toArray(), []);
-  const target = useDayTarget(today);
+  const prefs = useSettings();
+  const program = useActiveProgram();
   const training = useTraining();
+  const bodyOn = useMemo(() => bodyweightLookup(body ?? []), [body]);
+  /** The target in effect on a date: that day's answers, weight, and training or rest day. */
+  const targetOn = (date: string): Macros | null => {
+    const p = profileOn(prefs, date);
+    const kg = bodyOn(date);
+    if (!isCurrentProfile(p) || kg == null || !training || !workouts) return null;
+    const t = computeTargets(p, kg, training, Number(date.slice(0, 4)));
+    return targetFor(t, isTrainingDay(date, program, workouts));
+  };
 
-  const lifts = useMemo(() => liftHistory(workouts ?? []), [workouts]);
+  const lifts = useMemo(() => liftHistory(workouts ?? [], bodyOn), [workouts, bodyOn]);
   const trend = useMemo(() => weightTrend(body ?? []), [body]);
   const daily = useMemo(() => caloriesByDay(food ?? []), [food]);
 
@@ -94,8 +106,16 @@ export function ProgressBody() {
   const inRange = trend.filter((p) => p.date >= from);
   const done = workouts.filter((w) => w.finished_at && w.date >= from && w.date <= today);
   const loggedDays = [...daily.entries()].filter(([d, v]) => d >= from && d < today && v.kcal > 0);
-  const tgt = target ? target.targets.day : null;
-  const proteinHit = tgt ? loggedDays.filter(([, v]) => v.protein >= tgt.protein * 0.95).length : 0;
+  const proteinHit = loggedDays.filter(([d, v]) => {
+    const t = targetOn(d);
+    return t != null && v.protein >= t.protein * 0.95;
+  }).length;
+  // Average target over the calorie check's window, for comparing with what was eaten.
+  const checkTargets = [...daily.keys()]
+    .filter((d) => d >= addDays(today, -(CHECK_DAYS - 1)) && d < today)
+    .map((d) => targetOn(d)?.kcal)
+    .filter((k): k is number => k != null);
+  const checkTarget = checkTargets.length ? checkTargets.reduce((a, b) => a + b, 0) / checkTargets.length : targetOn(today)?.kcal;
   const sleeps = sleepInRange(sleep, from, today);
   const wu = weightUnit(units);
 
@@ -161,7 +181,9 @@ export function ProgressBody() {
         />
       </div>
 
-      {profile && tgt && <CheckCard profile={profile} body={body} daily={daily} targetKcal={tgt.kcal} units={units} />}
+      {isCurrentProfile(profile) && checkTarget != null && (
+        <CheckCard profile={profile} body={body} daily={daily} targetKcal={checkTarget} units={units} />
+      )}
 
       <div className="chart-grid">
         {main !== 'strength' && lifts.length > 0 && (
@@ -196,7 +218,7 @@ export function ProgressBody() {
           />
         </section>
 
-        <NutritionCharts daily={daily} from={from} today={today} target={tgt} />
+        <NutritionCharts daily={daily} from={from} today={today} targetOn={targetOn} />
 
         <section className="card">
           <h2>Sleep</h2>
@@ -334,7 +356,10 @@ function PRList({ prs, units }: { prs: ReturnType<typeof personalRecords>; units
             <span className="muted small"> · {prettyDate(p.date)}</span>
           </span>
           <span>
-            {kgToDisplay(p.point.weightKg, units)} {wu} × {p.point.reps}
+            {p.point.addedKg != null
+              ? `BW${p.point.addedKg ? (p.point.addedKg > 0 ? ' + ' : ' − ') + Math.abs(kgToDisplay(p.point.addedKg, units)) : ''}`
+              : kgToDisplay(p.point.weightKg, units)}{' '}
+            {p.point.addedKg != null && !p.point.addedKg ? '' : wu} × {p.point.reps}
             <span className="gain small"> +{round((p.point.e1rm / p.previous - 1) * 100, 1)}%</span>
           </span>
         </li>
@@ -436,38 +461,39 @@ function NutritionCharts({
   daily,
   from,
   today,
-  target,
+  targetOn,
 }: {
   daily: Map<string, { kcal: number; protein: number }>;
   from: string;
   today: string;
-  target: { kcal: number; protein: number } | null;
+  targetOn: (date: string) => Macros | null;
 }) {
   const days: string[] = [];
   for (let d = from; d <= today; d = addDays(d, 1)) days.push(d);
   // Long ranges show weekly averages of logged days.
   const weekly = days.length > 92;
-  const rows: { x: number; kcal: number; protein: number; label: string }[] = [];
-  if (weekly) {
-    const byWeek = new Map<string, { kcal: number; protein: number; n: number }>();
-    for (const d of days) {
-      const v = daily.get(d);
-      if (!v || v.kcal <= 0) continue;
-      const w = weekStart(d);
-      const cur = byWeek.get(w) ?? { kcal: 0, protein: 0, n: 0 };
-      cur.kcal += v.kcal;
-      cur.protein += v.protein;
-      cur.n++;
-      byWeek.set(w, cur);
-    }
-    for (const [w, v] of [...byWeek.entries()].sort()) {
-      rows.push({ x: dayMs(w), kcal: v.kcal / v.n, protein: v.protein / v.n, label: `Week of ${prettyDate(w)} (avg of ${v.n} days)` });
-    }
-  } else {
-    for (const d of days) {
-      const v = daily.get(d);
-      if (v && v.kcal > 0) rows.push({ x: dayMs(d), kcal: v.kcal, protein: v.protein, label: prettyDate(d) });
-    }
+  type Row = { x: number; kcal: number; protein: number; tKcal?: number; tProtein?: number; label: string };
+  const rows: Row[] = [];
+  const groups = new Map<string, string[]>();
+  for (const d of days) {
+    const v = daily.get(d);
+    if (!v || v.kcal <= 0) continue;
+    const key = weekly ? weekStart(d) : d;
+    groups.set(key, [...(groups.get(key) ?? []), d]);
+  }
+  for (const [key, ds] of [...groups.entries()].sort()) {
+    const avg = (f: (d: string) => number | undefined) => {
+      const vals = ds.map(f).filter((v): v is number => v != null);
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined;
+    };
+    rows.push({
+      x: dayMs(key),
+      kcal: avg((d) => daily.get(d)!.kcal)!,
+      protein: avg((d) => daily.get(d)!.protein)!,
+      tKcal: avg((d) => targetOn(d)?.kcal),
+      tProtein: avg((d) => targetOn(d)?.protein),
+      label: weekly ? `Week of ${prettyDate(key)} (avg of ${ds.length} days)` : prettyDate(key),
+    });
   }
   const xDomain: [number, number] = [dayMs(weekly ? weekStart(from) : from), dayMs(weekly ? weekStart(today) : today)];
   return (
@@ -475,9 +501,8 @@ function NutritionCharts({
       <section className="card">
         <h2>Calories{weekly ? ' (weekly average)' : ''}</h2>
         <BarChart
-          bars={rows.map((r) => ({ x: r.x, y: r.kcal, label: r.label }))}
+          bars={rows.map((r) => ({ x: r.x, y: r.kcal, label: r.label, target: r.tKcal }))}
           yFormat={(v) => fmt(v)}
-          refLine={target ? { y: target.kcal, label: 'target' } : undefined}
           color={SERIES_COLORS[3]}
           xDomain={xDomain}
         />
@@ -485,9 +510,8 @@ function NutritionCharts({
       <section className="card">
         <h2>Protein{weekly ? ' (weekly average)' : ''}</h2>
         <BarChart
-          bars={rows.map((r) => ({ x: r.x, y: r.protein, label: r.label }))}
+          bars={rows.map((r) => ({ x: r.x, y: r.protein, label: r.label, target: r.tProtein }))}
           yFormat={(v) => `${Math.round(v)}g`}
-          refLine={target ? { y: target.protein, label: 'target' } : undefined}
           color={SERIES_COLORS[4]}
           xDomain={xDomain}
         />

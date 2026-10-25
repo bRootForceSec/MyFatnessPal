@@ -12,12 +12,15 @@ import {
   formatReps,
   formatRest,
   hms,
+  isBodyweight,
   lastPerformance,
+  nextWeight,
   plannedSets,
   progress,
   type LastPerformance,
 } from '../lib/workout';
 import { inProgress, saveWorkout, useWorkouts } from '../lib/workoutData';
+import { useWeightOn } from '../lib/foodData';
 
 /** Keep the phone screen on during a workout, where supported. */
 function useWakeLock() {
@@ -115,7 +118,7 @@ function Card({ w, history, onFinish }: { w: Workout; history: Workout[]; onFini
       </div>
 
       <div className="session-body" key={idx}>
-        <BlockView block={block} units={units} history={history} workoutId={w.id} update={(fn) => update((d) => fn(d.blocks[idx]))} />
+        <BlockView block={block} units={units} history={history} workoutId={w.id} date={w.date} update={(fn) => update((d) => fn(d.blocks[idx]))} />
       </div>
 
       <div className="session-nav">
@@ -195,15 +198,19 @@ export function BlockView({
   units,
   history,
   workoutId,
+  date,
   update,
 }: {
   block: WorkoutBlock;
   units: UnitSystem;
   history: Workout[];
   workoutId: string;
+  /** The workout's date, for that day's bodyweight. */
+  date: string;
   update: (fn: (b: WorkoutBlock) => void) => void;
 }) {
   const superset = block.exercises.length > 1;
+  const bodyKg = useWeightOn(date);
   return (
     <div className={block.skipped ? 'skipped' : ''}>
       <div className="block-tags">
@@ -224,6 +231,7 @@ export function BlockView({
           units={units}
           history={history}
           workoutId={workoutId}
+          bodyKg={bodyKg ?? null}
           update={(fn) => update((b) => fn(b.exercises[ei]))}
         />
       ))}
@@ -248,6 +256,7 @@ function ExerciseView({
   units,
   history,
   workoutId,
+  bodyKg,
   update,
 }: {
   ex: WorkoutExercise;
@@ -256,10 +265,13 @@ function ExerciseView({
   units: UnitSystem;
   history: Workout[];
   workoutId: string;
+  bodyKg: number | null;
   update: (fn: (e: WorkoutExercise) => void) => void;
 }) {
   const last = useMemo(() => lastPerformance(ex.name, history, workoutId), [ex.name, history, workoutId]);
   const wu = weightUnit(units);
+  const imperial = units === 'imperial';
+  const next = nextWeight(last, ex.repsMax, imperial, !!ex.bodyweight);
   let workNo = 0;
   let warmNo = 0;
 
@@ -272,7 +284,8 @@ function ExerciseView({
       // Refill weights from the new exercise's history for sets not yet done.
       const warm = e.sets.filter((s) => s.kind === 'warmup').length;
       const work = e.sets.filter((s) => s.kind === 'work').length;
-      const fresh = plannedSets(warm, work, e.rir, lastNext);
+      e.bodyweight = isBodyweight(next, lastNext);
+      const fresh = plannedSets(warm, work, e.rir, lastNext, nextWeight(lastNext, e.repsMax, imperial, e.bodyweight));
       e.sets = e.sets.map((s, i) => (s.reps == null ? { ...s, weight_kg: fresh[i]?.weight_kg ?? null } : s));
     });
   }
@@ -284,11 +297,21 @@ function ExerciseView({
           {letter && <span className="ex-letter">{letter}</span>}
           {ex.name}
         </h2>
-        {ex.options.length > 1 && (
-          <button className="link-btn" onClick={swap}>
-            Swap
+        <div className="ex-head-btns">
+          <button
+            className={`bw-toggle ${ex.bodyweight ? 'on' : ''}`}
+            onClick={() => update((e) => void (e.bodyweight = !e.bodyweight))}
+            aria-pressed={!!ex.bodyweight}
+            title="Count your bodyweight in this exercise"
+          >
+            BW
           </button>
-        )}
+          {ex.options.length > 1 && (
+            <button className="link-btn" onClick={swap}>
+              Swap
+            </button>
+          )}
+        </div>
       </div>
       <div className="ex-target">
         {ex.sets.filter((s) => s.kind === 'work').length} × {formatReps(ex.repsMin, ex.repsMax)}
@@ -296,11 +319,27 @@ function ExerciseView({
         {ex.notes && <span className="muted"> · {ex.notes}</span>}
       </div>
       <LastLine last={last} units={units} />
+      {ex.bodyweight && (
+        <div className="ex-bw muted small">
+          Bodyweight exercise: {bodyKg != null ? `${kgToDisplay(bodyKg, units)} ${wu}` : 'log your weight under Body'} + any added weight
+          (belt, backpack). Use a negative number for assisted.
+        </div>
+      )}
+      {next && (
+        <div className="ex-next">
+          ↑ You hit {ex.repsMax}+ reps on every set last time. Try {ex.bodyweight ? '+' : ''}
+          {kgToDisplay(next.weightKg, units)} {wu}
+          {ex.bodyweight ? ' added' : ''} (+{kgToDisplay(next.stepKg, units)}).
+        </div>
+      )}
+      {!next && last && last.sets.some((s) => s.kind === 'work') && (
+        <div className="ex-next muted">Goal: beat last time's reps. At {ex.repsMax} on every set, add weight.</div>
+      )}
 
       <div className="set-table">
         <div className="set-row set-head">
           <span>Set</span>
-          <span>{wu}</span>
+          <span>{ex.bodyweight ? `+${wu}` : wu}</span>
           <span>Reps</span>
           <span>RIR</span>
           <span />
@@ -314,6 +353,7 @@ function ExerciseView({
                 set={s}
                 label={label}
                 units={units}
+                weightPlaceholder={ex.bodyweight ? 'BW' : ''}
                 placeholder={s.kind === 'warmup' ? '' : formatReps(ex.repsMin, ex.repsMax)}
                 onChange={(patch) => update((e) => Object.assign(e.sets[si], patch))}
                 onRemove={() => update((e) => void e.sets.splice(si, 1))}
@@ -370,6 +410,7 @@ function SetRow({
   label,
   units,
   placeholder,
+  weightPlaceholder,
   onChange,
   onRemove,
 }: {
@@ -377,6 +418,7 @@ function SetRow({
   label: string;
   units: UnitSystem;
   placeholder: string;
+  weightPlaceholder: string;
   onChange: (patch: Partial<WorkoutSet>) => void;
   onRemove: () => void;
 }) {
@@ -386,6 +428,7 @@ function SetRow({
       <span className="set-label">{label}</span>
       <NumberField
         label={`Set ${label} weight`}
+        placeholder={weightPlaceholder}
         value={set.weight_kg == null ? null : kgToDisplay(set.weight_kg, units)}
         onChange={(v) => onChange({ weight_kg: v == null ? null : round(displayToKg(v, units), 3) })}
       />

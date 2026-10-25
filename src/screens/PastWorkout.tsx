@@ -60,7 +60,7 @@ export function PastWorkout() {
 
       {w.blocks.map((b, i) => (
         <section key={b.blockId + i} className="card past-block">
-          <BlockView block={b} units={units} history={before} workoutId={w.id} update={(fn) => update((d) => fn(d.blocks[i]))} />
+          <BlockView block={b} units={units} history={before} workoutId={w.id} date={w.date} update={(fn) => update((d) => fn(d.blocks[i]))} />
           {b.optional && (
             <button className="link-btn small" onClick={() => update((d) => void (d.blocks[i].skipped = !d.blocks[i].skipped))}>
               {b.skipped ? 'Mark as done' : 'Mark as skipped'}

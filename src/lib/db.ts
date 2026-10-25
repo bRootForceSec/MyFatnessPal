@@ -75,9 +75,18 @@ export interface Profile {
   kcal_adjust?: number;
 }
 
+/** A saved version of the nutrition answers, in effect from a date. */
+export interface ProfileVersion {
+  /** YYYY-MM-DD; '0000-00-00' for answers saved before history was kept. */
+  from: string;
+  profile: Profile;
+}
+
 export interface Settings extends BaseRecord {
   units: UnitSystem;
   profile?: Profile;
+  /** Earlier versions of `profile`, so past days keep the targets they had. Oldest first. */
+  profile_history?: ProfileVersion[];
 }
 
 /* ---------- Food ---------- */
@@ -195,6 +204,8 @@ export interface WorkoutExercise {
   repsMax: number;
   rir: number | null;
   notes?: string;
+  /** Bodyweight exercise: set weights are added weight (belt, backpack) on top of that day's bodyweight. */
+  bodyweight?: boolean;
   sets: WorkoutSet[];
 }
 
