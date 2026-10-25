@@ -6,6 +6,8 @@ import { formatHours, localDate } from '../lib/dates';
 import { go } from '../lib/router';
 import { useSettings } from '../lib/settings';
 import { kgToDisplay, weightUnit } from '../lib/units';
+import { plannedDay } from '../lib/workout';
+import { inProgress, useActiveProgram, useWorkouts } from '../lib/workoutData';
 
 export function Home() {
   const today = localDate();
@@ -18,6 +20,24 @@ export function Home() {
     const all = await db.body.orderBy('date').reverse().filter((r) => !r.deleted && r.weight_kg != null).first();
     return all;
   }, []);
+
+  const program = useActiveProgram();
+  const workouts = useWorkouts();
+  let workoutSub = '';
+  if (program && workouts) {
+    const active = inProgress(workouts);
+    const planned = plannedDay(program, workouts);
+    const doneToday = workouts.some((w) => w.date === today && w.finished_at);
+    workoutSub = active
+      ? `Resume ${active.day_name}`
+      : doneToday
+        ? 'Done today ✓'
+        : planned
+          ? `Today: ${planned.name}`
+          : 'Rest day';
+  } else if (program === null) {
+    workoutSub = 'Set up your program';
+  }
 
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -44,6 +64,7 @@ export function Home() {
           <WorkoutIcon size={44} />
           <span className="big-text">
             <span className="big-label">Workout</span>
+            {workoutSub && <span className="big-sub">{workoutSub}</span>}
           </span>
         </button>
         <button className="big-btn sleep" onClick={() => go('sleep')}>
