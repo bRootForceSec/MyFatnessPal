@@ -2,46 +2,59 @@ import { useEffect, useState } from 'react';
 import { Header } from '../components/Header';
 import { NumberField } from '../components/NumberField';
 import { localDate } from '../lib/dates';
-import type { Activity, BodyLog, Goal, Profile } from '../lib/db';
-import { useWeightOn } from '../lib/foodData';
-import { ACTIVITY, computeTargets, defaultProfile, fmt, GOALS, KCAL_PER_KG } from '../lib/nutrition';
+import { db, type BodyLog, type Goal, type Lifestyle, type Profile } from '../lib/db';
+import { useTraining, useWeightOn } from '../lib/foodData';
+import {
+  computeTargets,
+  fmt,
+  GOALS,
+  isCurrentProfile,
+  KCAL_PER_KG,
+  LIFESTYLE,
+  LIFT_KCAL_PER_KG_HOUR,
+  RECOMP_RATE_KG,
+  rateChoices,
+  upgradeProfile,
+  type Targets as TargetsT,
+  type Training,
+} from '../lib/nutrition';
 import { newId, saveRecord } from '../lib/records';
 import { go } from '../lib/router';
 import { updateSettings, useSettings } from '../lib/settings';
-import { CM_PER_IN, displayToKg, KG_PER_LB, kgToDisplay, round, weightUnit } from '../lib/units';
-import { useActiveProgram } from '../lib/workoutData';
-import { db } from '../lib/db';
+import { CM_PER_IN, displayToKg, KG_PER_LB, kgToDisplay, round, weightUnit, type UnitSystem } from '../lib/units';
+
+/** g/kg <-> g per display unit of bodyweight. */
+const perUnit = (gPerKg: number, imperial: boolean) => (imperial ? gPerKg * KG_PER_LB : gPerKg);
+const fromPerUnit = (v: number, imperial: boolean) => (imperial ? v / KG_PER_LB : v);
 
 export function Targets() {
   const { units, profile, loaded } = useSettings();
   const today = localDate();
   const weightKg = useWeightOn(today);
-  const program = useActiveProgram();
+  const training = useTraining();
   const [p, setP] = useState<Profile | null>(null);
   const [weight, setWeight] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
-    if (!loaded || weightKg === undefined || program === undefined || p) return;
-    const trainingDays =
-      program?.schedule === 'weekly' ? new Set(program.days.flatMap((d) => d.weekdays)).size || 6 : 6;
-    setP(profile ?? defaultProfile(trainingDays));
+    if (!loaded || weightKg === undefined || p) return;
+    setP(upgradeProfile(profile));
     setWeight(weightKg == null ? null : kgToDisplay(weightKg, units));
-    if (!profile) setEditing(true);
-  }, [loaded, weightKg, program, profile, units, p]);
+    if (!isCurrentProfile(profile)) setEditing(true);
+  }, [loaded, weightKg, profile, units, p]);
 
-  if (!p) return <main className="screen" />;
+  if (!p || !training) return <main className="screen" />;
 
   const imperial = units === 'imperial';
   const wu = weightUnit(units);
   const set = <K extends keyof Profile>(k: K, v: Profile[K]) => setP({ ...p, [k]: v });
   const wKg = weight == null ? null : displayToKg(weight, units);
-  const t = wKg ? computeTargets(p, wKg) : null;
+  const t = wKg ? computeTargets(p, wKg, training) : null;
 
   async function save() {
     if (!p || wKg == null) return;
     if (weightKg == null || Math.abs(weightKg - wKg) > 0.05) {
-      // Record the weight you entered as today's weigh-in.
+      // Record the weight entered here as today's weigh-in.
       const existing = await db.body.where('date').equals(today).filter((b) => !b.deleted).first();
       await saveRecord<BodyLog>('body', { ...(existing ?? { id: newId(), date: today }), weight_kg: round(wKg, 3) });
     }
@@ -52,12 +65,8 @@ export function Targets() {
   const totalIn = Math.round(p.height_cm / CM_PER_IN);
   const ft = Math.floor(totalIn / 12);
   const inch = totalIn % 12;
-  const proteinPerUnit = imperial ? p.protein_g_per_kg * KG_PER_LB : p.protein_g_per_kg;
-  const rateLabel = (r: number) => {
-    if (r === 0) return 'Hold weight';
-    const perWeek = wKg ? kgToDisplay(Math.abs((r / 100) * wKg), units) : null;
-    return `${r > 0 ? '+' : '−'}${Math.abs(r)}%/wk${perWeek != null ? ` (${perWeek} ${wu})` : ''}`;
-  };
+  const rateLabel = (kg: number) => (imperial ? `${round(kg / KG_PER_LB, 1)} lb` : `${round(kg, 2)} kg`) + ' a week';
+  const sameRate = (a: number, b: number) => Math.abs(a - b) < 0.01;
 
   return (
     <main className="screen">
@@ -89,19 +98,11 @@ export function Targets() {
                 <>
                   <label className="field">
                     <span>Height (ft)</span>
-                    <NumberField
-                      label="Height feet"
-                      value={ft}
-                      onChange={(v) => v != null && set('height_cm', (Math.round(v) * 12 + inch) * CM_PER_IN)}
-                    />
+                    <NumberField label="Height feet" value={ft} onChange={(v) => v != null && set('height_cm', (Math.round(v) * 12 + inch) * CM_PER_IN)} />
                   </label>
                   <label className="field">
                     <span>(in)</span>
-                    <NumberField
-                      label="Height inches"
-                      value={inch}
-                      onChange={(v) => v != null && set('height_cm', (ft * 12 + v) * CM_PER_IN)}
-                    />
+                    <NumberField label="Height inches" value={inch} onChange={(v) => v != null && set('height_cm', (ft * 12 + v) * CM_PER_IN)} />
                   </label>
                 </>
               ) : (
@@ -118,13 +119,12 @@ export function Targets() {
           </section>
 
           <section className="card form-card">
-            <h2>Activity</h2>
-            <p className="muted small">Count your training. You lift {p.training_days} days a week.</p>
+            <h2>Outside of workouts, how active is your lifestyle?</h2>
             <div className="choice-list">
-              {(Object.keys(ACTIVITY) as Activity[]).map((a) => (
-                <button key={a} className={`choice ${p.activity === a ? 'on' : ''}`} onClick={() => set('activity', a)}>
-                  <strong>{ACTIVITY[a].label}</strong>
-                  <span>{ACTIVITY[a].desc}</span>
+              {(Object.keys(LIFESTYLE) as Lifestyle[]).map((a) => (
+                <button key={a} className={`choice ${p.lifestyle === a ? 'on' : ''}`} onClick={() => set('lifestyle', a)}>
+                  <strong>{LIFESTYLE[a].label}</strong>
+                  <span>{LIFESTYLE[a].desc}</span>
                 </button>
               ))}
             </div>
@@ -137,25 +137,42 @@ export function Targets() {
                 <button
                   key={g}
                   className={`choice ${p.goal === g ? 'on' : ''}`}
-                  onClick={() => setP({ ...p, goal: g, rate_pct: GOALS[g].defaultRate })}
+                  onClick={() => {
+                    const rates = rateChoices(g, imperial);
+                    setP({ ...p, goal: g, rate_kg: rates.length ? rates[Math.min(1, rates.length - 1)] : p.rate_kg });
+                  }}
                 >
                   <strong>{GOALS[g].label}</strong>
                   <span>{GOALS[g].desc}</span>
                 </button>
               ))}
             </div>
-            {GOALS[p.goal].rates.length > 1 && (
-              <>
-                <p className="muted small">How fast, as a share of bodyweight per week:</p>
-                <div className="chips wrap">
-                  {GOALS[p.goal].rates.map((r) => (
-                    <button key={r} className={`chip ${p.rate_pct === r ? 'on' : ''}`} onClick={() => set('rate_pct', r)}>
-                      {rateLabel(r)}
-                    </button>
-                  ))}
-                </div>
-              </>
+            {rateChoices(p.goal, imperial).length > 0 && (
+              <div className="chips wrap">
+                {rateChoices(p.goal, imperial).map((r) => (
+                  <button key={r} className={`chip ${sameRate(p.rate_kg, r) ? 'on' : ''}`} onClick={() => set('rate_kg', r)}>
+                    {p.goal === 'lose' ? 'Lose' : 'Gain'} {rateLabel(r)}
+                  </button>
+                ))}
+              </div>
             )}
+          </section>
+
+          <section className="card form-card">
+            <h2>Workouts</h2>
+            <p className="muted small">{trainingText(training)}</p>
+            <div className="segmented">
+              <button className={p.workout_mode === 'spread' ? 'on' : ''} onClick={() => set('workout_mode', 'spread')}>
+                Same target every day
+              </button>
+              <button className={p.workout_mode === 'training_days' ? 'on' : ''} onClick={() => set('workout_mode', 'training_days')}>
+                Eat more on training days
+              </button>
+            </div>
+            <label className="field">
+              <span>Calories burned per workout (leave blank to estimate)</span>
+              <NumberField label="Calories per workout" value={p.workout_kcal} placeholder={t ? String(t.working.perWorkout) : ''} onChange={(v) => set('workout_kcal', v == null ? null : Math.round(v))} />
+            </label>
           </section>
 
           <section className="card form-card">
@@ -174,32 +191,13 @@ export function Targets() {
                 <NumberField label="Calories" value={p.manual_kcal} onChange={(v) => v && set('manual_kcal', Math.round(v))} />
               </label>
             )}
-            <label className="toggle">
-              <input type="checkbox" checked={p.cycle} onChange={(e) => set('cycle', e.target.checked)} />
-              Eat more on training days, less on rest days
-            </label>
-            {p.cycle && (
-              <div className="field-row">
-                <label className="field">
-                  <span>Training days get</span>
-                  <div className="with-unit">
-                    <NumberField label="Training day extra %" value={Math.round(p.cycle_pct * 100)} onChange={(v) => v != null && set('cycle_pct', v / 100)} />
-                    <span className="unit">% more than rest days</span>
-                  </div>
-                </label>
-                <label className="field">
-                  <span>Training days / week</span>
-                  <NumberField label="Training days per week" value={p.training_days} onChange={(v) => v != null && set('training_days', Math.min(7, Math.max(0, Math.round(v))))} />
-                </label>
-              </div>
-            )}
           </section>
 
           <section className="card form-card">
-            <h2>Protein and fat</h2>
+            <h2>Macros</h2>
             <div className="segmented">
               <button className={p.protein_mode === 'per_weight' ? 'on' : ''} onClick={() => set('protein_mode', 'per_weight')}>
-                Per {wu} bodyweight
+                Protein per {wu}
               </button>
               <button className={p.protein_mode === 'fixed' ? 'on' : ''} onClick={() => set('protein_mode', 'fixed')}>
                 Fixed grams
@@ -209,11 +207,7 @@ export function Targets() {
               {p.protein_mode === 'per_weight' ? (
                 <label className="field">
                   <span>Protein (g per {wu})</span>
-                  <NumberField
-                    label="Protein per bodyweight"
-                    value={round(proteinPerUnit, 2)}
-                    onChange={(v) => v != null && set('protein_g_per_kg', imperial ? v / KG_PER_LB : v)}
-                  />
+                  <NumberField label="Protein per bodyweight" value={round(perUnit(p.protein_g_per_kg, imperial), 2)} onChange={(v) => v != null && set('protein_g_per_kg', fromPerUnit(v, imperial))} />
                 </label>
               ) : (
                 <label className="field">
@@ -226,8 +220,20 @@ export function Targets() {
                 <NumberField label="Fat percent" value={Math.round(p.fat_pct * 100)} onChange={(v) => v != null && set('fat_pct', v / 100)} />
               </label>
             </div>
+            <div className="field-row">
+              <label className="field">
+                <span>Fat minimum (g per {wu})</span>
+                <NumberField label="Fat minimum" value={round(perUnit(p.fat_min_g_per_kg, imperial), 2)} onChange={(v) => v != null && set('fat_min_g_per_kg', fromPerUnit(v, imperial))} />
+              </label>
+              <label className="field">
+                <span>Carb minimum (g per {wu})</span>
+                <NumberField label="Carb minimum" value={round(perUnit(p.carb_min_g_per_kg, imperial), 2)} onChange={(v) => v != null && set('carb_min_g_per_kg', fromPerUnit(v, imperial))} />
+              </label>
+            </div>
             <p className="muted small">
-              Common ranges: protein {imperial ? '0.7–1.0 g/lb' : '1.6–2.2 g/kg'}, fat 20–35%. Carbs fill the rest.
+              Protein and calories matter most. Fat has a floor for hormone health (about {imperial ? '0.3 g/lb' : '0.66 g/kg'}), and
+              carbs fuel hard training (the {imperial ? '0.5 g/lb' : '1.1 g/kg'} default floor is deliberately low). Carbs fill whatever
+              is left after protein and fat. Typical protein for lifting: {imperial ? '0.7–1.0 g/lb' : '1.6–2.2 g/kg'}.
             </p>
           </section>
 
@@ -236,7 +242,7 @@ export function Targets() {
           <button className="primary" disabled={wKg == null} onClick={save}>
             Save targets
           </button>
-          {profile && (
+          {isCurrentProfile(profile) && (
             <button className="link-btn" onClick={() => go('meal')}>
               Cancel
             </button>
@@ -247,40 +253,51 @@ export function Targets() {
   );
 }
 
-function Working({ t, p, units }: { t: ReturnType<typeof computeTargets>; p: Profile; units: 'metric' | 'imperial' }) {
+function trainingText(t: Training): string {
+  if (t.sessionsPerWeek === 0) return 'No workout program yet. Workout calories start counting once you set one up.';
+  const mins = Math.round(t.hours * 60);
+  return `From your program: ${t.sessionsPerWeek} workouts a week, about ${mins} minutes each (updates as you log workouts).`;
+}
+
+function Working({ t, p, units }: { t: TargetsT; p: Profile; units: UnitSystem }) {
   const w = t.working;
+  const imperial = units === 'imperial';
   const wu = weightUnit(units);
-  const proteinLine =
-    p.protein_mode === 'fixed'
-      ? `${p.protein_fixed_g} g (fixed)`
-      : `${round(units === 'imperial' ? p.protein_g_per_kg * KG_PER_LB : p.protein_g_per_kg, 2)} g × ${kgToDisplay(w.weightKg, units)} ${wu} = ${t.day.protein} g`;
+  const wDisp = kgToDisplay(w.weightKg, units);
+  const kgWeek = p.goal === 'lose' ? -p.rate_kg : p.goal === 'gain' ? p.rate_kg : p.goal === 'recomp' ? -RECOMP_RATE_KG : 0;
+  const box = (m: TargetsT['day']) => (
+    <div className="target-grid">
+      <div>
+        <strong>{fmt(m.kcal)}</strong>
+        <span>kcal</span>
+      </div>
+      <div>
+        <strong>{m.protein}g</strong>
+        <span>protein</span>
+      </div>
+      <div>
+        <strong>{m.carbs}g</strong>
+        <span>carbs</span>
+      </div>
+      <div>
+        <strong>{m.fat}g</strong>
+        <span>fat</span>
+      </div>
+    </div>
+  );
   return (
     <section className="card working">
-      <h2>Your daily targets</h2>
-      <div className="target-grid">
-        <div>
-          <strong>{fmt(t.day.kcal)}</strong>
-          <span>kcal</span>
-        </div>
-        <div>
-          <strong>{t.day.protein}g</strong>
-          <span>protein</span>
-        </div>
-        <div>
-          <strong>{t.day.carbs}g</strong>
-          <span>carbs</span>
-        </div>
-        <div>
-          <strong>{t.day.fat}g</strong>
-          <span>fat</span>
-        </div>
-      </div>
+      <h2>{t.train ? 'Average day' : 'Your daily targets'}</h2>
+      {box(t.day)}
       {t.train && t.rest && (
         <p className="small">
           Training days: <strong>{fmt(t.train.kcal)} kcal</strong> ({t.train.carbs}g carbs) · Rest days:{' '}
-          <strong>{fmt(t.rest.kcal)} kcal</strong> ({t.rest.carbs}g carbs). Same weekly total.
+          <strong>{fmt(t.rest.kcal)} kcal</strong> ({t.rest.carbs}g carbs)
         </p>
       )}
+      <p className="muted small">
+        Minimums: fat {t.min.fat}g, carbs {t.min.carbs}g
+      </p>
       <details className="how">
         <summary>How this is worked out</summary>
         <ol>
@@ -289,24 +306,43 @@ function Working({ t, p, units }: { t: ReturnType<typeof computeTargets>; p: Pro
             {p.sex === 'male' ? '+ 5' : '− 161'} = <strong>{fmt(w.bmr)} kcal</strong>
           </li>
           <li>
-            × {w.factor} for “{ACTIVITY[p.activity].label}” = <strong>{fmt(w.tdee)} kcal</strong> maintenance
+            × {w.factor} for a “{LIFESTYLE[p.lifestyle].label.toLowerCase()}” lifestyle = <strong>{fmt(w.lifestyleKcal)} kcal</strong>{' '}
+            before workouts
+          </li>
+          <li>
+            Workouts: {w.workoutEstimated ? `${LIFT_KCAL_PER_KG_HOUR} kcal × ${round(w.weightKg, 1)} kg × ${round(w.hours, 2)} h = ` : ''}
+            {fmt(w.perWorkout)} kcal each × {w.sessions} a week ÷ 7 = <strong>+{fmt(w.workoutDaily)} kcal/day</strong>
+            {p.workout_mode === 'training_days' && t.train ? ' on average (all of it on training days)' : ''}
           </li>
           {p.calorie_mode === 'manual' ? (
             <li>You set your own target: {fmt(p.manual_kcal)} kcal</li>
           ) : (
             <li>
-              {GOALS[p.goal].label}, {p.rate_pct}% of bodyweight a week: {p.rate_pct}% × {round(w.weightKg, 1)} kg × {KCAL_PER_KG} kcal/kg ÷ 7 ={' '}
-              {w.adjust > 0 ? '+' : ''}
-              {fmt(w.adjust)} kcal/day → <strong>{fmt(t.day.kcal)} kcal</strong>
+              {GOALS[p.goal].label}
+              {kgWeek !== 0 && (
+                <>
+                  : {imperial ? `${round(kgWeek / KG_PER_LB, 2)} lb` : `${round(kgWeek, 2)} kg`} a week × {imperial ? '3,500 kcal/lb' : `${KCAL_PER_KG} kcal/kg`} ÷ 7 ={' '}
+                  {w.adjust > 0 ? '+' : ''}
+                  {fmt(w.adjust)} kcal/day
+                </>
+              )}{' '}
+              → <strong>{fmt(t.day.kcal)} kcal</strong>
+              {w.floored ? ` (raised to the ${fmt(w.floor)} kcal minimum)` : ''}
             </li>
           )}
-          <li>Protein: {proteinLine}</li>
           <li>
-            Fat: {Math.round(p.fat_pct * 100)}% of calories ÷ 9 = {t.day.fat} g. Carbs: what's left ÷ 4 = {t.day.carbs} g
+            Protein:{' '}
+            {p.protein_mode === 'fixed'
+              ? `${p.protein_fixed_g} g (fixed)`
+              : `${round(perUnit(p.protein_g_per_kg, imperial), 2)} g × ${wDisp} ${wu} = ${t.day.protein} g`}
+          </li>
+          <li>
+            Fat: {Math.round(p.fat_pct * 100)}% of calories ÷ 9 (at least {t.min.fat} g) = {t.day.fat} g. Carbs: what's left ÷ 4 ={' '}
+            {t.day.carbs} g
           </li>
         </ol>
         <p className="muted small">
-          These formulas are estimates. After a few weeks of logging, compare your weight trend with the goal and adjust.
+          These are estimates. After 2–3 weeks of logging, compare your weight trend with your goal and adjust.
         </p>
       </details>
       {t.warnings.map((m) => (

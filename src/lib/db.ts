@@ -41,31 +41,36 @@ export interface BodyLog extends BaseRecord {
 }
 
 export type Sex = 'male' | 'female';
-export type Activity = 'sedentary' | 'light' | 'moderate' | 'very' | 'extra';
+/** How active your day is outside of workouts. */
+export type Lifestyle = 'not_very' | 'light' | 'active' | 'very';
 export type Goal = 'lose' | 'recomp' | 'maintain' | 'gain';
 
 /** Answers from the nutrition setup. Everything is stored in metric. */
 export interface Profile {
+  /** Bumped when the questions change, so older answers get asked again. */
+  v: 2;
   sex: Sex;
   birth_year: number;
   height_cm: number;
-  activity: Activity;
+  lifestyle: Lifestyle;
   goal: Goal;
-  /** Target change in bodyweight per week, as % of bodyweight (negative = lose). */
-  rate_pct: number;
+  /** Weekly change for lose / gain, in kg per week (always positive). */
+  rate_kg: number;
+  /** How workout calories are added: the same every day, or only on training days. */
+  workout_mode: 'spread' | 'training_days';
+  /** Calories burned per workout; null = estimate from bodyweight and session length. */
+  workout_kcal: number | null;
   protein_mode: 'per_weight' | 'fixed';
   /** Grams of protein per kg of bodyweight (shown as g/lb in imperial). */
   protein_g_per_kg: number;
   protein_fixed_g: number;
   /** Share of calories from fat, e.g. 0.25. Carbs fill the rest. */
   fat_pct: number;
+  /** Minimums, in grams per kg of bodyweight. */
+  fat_min_g_per_kg: number;
+  carb_min_g_per_kg: number;
   calorie_mode: 'calculated' | 'manual';
   manual_kcal: number;
-  /** Shift calories from rest days to training days (same weekly total). */
-  cycle: boolean;
-  /** e.g. 0.1 = a training day gets 10% of the daily average more than a rest day. */
-  cycle_pct: number;
-  training_days: number;
 }
 
 export interface Settings extends BaseRecord {
