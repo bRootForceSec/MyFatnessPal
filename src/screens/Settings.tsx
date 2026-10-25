@@ -7,7 +7,8 @@ import { buildCsv, type CsvKind } from '../lib/csv';
 import { updateSettings, useSettings } from '../lib/settings';
 import { configFromBuild, getConfig, getSupabase, saveConfig } from '../lib/supabase';
 import { syncNow, useSyncState } from '../lib/sync';
-import { setUsdaKey, usdaKey, usdaKeyFromBuild } from '../lib/foodApi';
+import { usdaKeyFromBuild } from '../lib/foodApi';
+import { saveUsdaKey } from '../lib/usdaKeySync';
 import { go } from '../lib/router';
 import { localDate } from '../lib/dates';
 
@@ -252,23 +253,37 @@ function SignIn() {
 }
 
 function UsdaKey() {
-  const cur = usdaKey();
-  const [key, setKey] = useState(cur === 'DEMO_KEY' ? '' : cur);
-  const [saved, setSaved] = useState(false);
+  const { usda_key, loaded } = useSettings();
+  const [key, setKey] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const value = key ?? usda_key ?? '';
+  const saved = !!usda_key && value.trim() === usda_key;
   return (
     <section className="card">
       <h2>Food search key</h2>
       <p className="muted">
-        Food search uses the free USDA database. Without your own key it's limited to about 30 searches an hour. Get a free key
-        at api.data.gov/signup and paste it here.
+        Food search uses the free USDA database. Without your own key it's limited to about 30 searches an hour. Get a free key at
+        fdc.nal.usda.gov/api-key-signup.html and paste it here. It syncs to your other devices.
       </p>
       <label className="field">
         <span>USDA API key</span>
-        <input value={key} onChange={(e) => { setKey(e.target.value); setSaved(false); }} placeholder="DEMO_KEY" />
+        <input value={value} onChange={(e) => setKey(e.target.value)} placeholder="DEMO_KEY" autoComplete="off" spellCheck={false} />
       </label>
-      <button className="secondary" onClick={() => { setUsdaKey(key); setSaved(true); }}>
+      <button
+        className="secondary"
+        disabled={!loaded || saving || saved}
+        onClick={async () => {
+          setSaving(true);
+          await saveUsdaKey(value);
+          setKey(null);
+          setSaving(false);
+        }}
+      >
         {saved ? 'Saved' : 'Save key'}
       </button>
+      <p className="small muted">
+        {usda_key ? `✓ Saved and synced to your devices (ends in …${usda_key.slice(-4)}).` : 'No key saved yet. Using the shared demo key.'}
+      </p>
     </section>
   );
 }
